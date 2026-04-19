@@ -1325,7 +1325,6 @@ else:
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <div class='footer'>
-    Sepsis Early Warning System &nbsp;·&nbsp; Zaid Ali &nbsp;·&nbsp; Roll No. 40
-    &nbsp;·&nbsp; BS CS 6th Semester &nbsp;·&nbsp; AWKUM 2025–26 &nbsp;·&nbsp;
+    Sepsis Early Warning System &nbsp;·&nbsp; Zaid Ali &nbsp;·&nbsp; AWKUM 2025–26 &nbsp;·&nbsp;
     XGBoost AUROC 0.8158 &nbsp;·&nbsp; PhysioNet CinC 2019
 </div>""", unsafe_allow_html=True)
