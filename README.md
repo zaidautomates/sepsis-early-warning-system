@@ -1,204 +1,382 @@
+<div align="center">
+
 # 🏥 Sepsis Early Warning System
 
-> **AI-powered ICU monitoring — 6-hour early sepsis prediction using XGBoost + SHAP Explainability**
+### AI-powered ICU prediction — 6 hours before clinical sepsis onset
 
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io)
-[![XGBoost](https://img.shields.io/badge/XGBoost-AUROC_0.8158-189AB4?style=flat-square)](https://xgboost.readthedocs.io)
-[![SHAP](https://img.shields.io/badge/SHAP-Explainability-00C8B4?style=flat-square)](https://shap.readthedocs.io)
-[![Dataset](https://img.shields.io/badge/PhysioNet_CinC_2019-40%2C336_Patients-6B21A8?style=flat-square)](https://physionet.org/content/challenge-2019/)
-[![License](https://img.shields.io/badge/License-MIT-22C55E?style=flat-square)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10-3776AB?style=flat&logo=python&logoColor=white)](https://python.org)
+[![Streamlit](https://img.shields.io/badge/Streamlit-v1.x-FF4B4B?style=flat&logo=streamlit&logoColor=white)](https://streamlit.io)
+[![XGBoost](https://img.shields.io/badge/XGBoost-AUROC_0.8158-189AB4?style=flat)](https://xgboost.readthedocs.io)
+[![SHAP](https://img.shields.io/badge/SHAP-TreeExplainer-7C3AED?style=flat)](https://shap.readthedocs.io)
+[![License](https://img.shields.io/badge/License-MIT-059669?style=flat)](LICENSE)
+[![Dataset](https://img.shields.io/badge/Dataset-PhysioNet_2019-DC2626?style=flat)](https://physionet.org/content/challenge-2019/1.0.0/)
 
----
+**[Live Demo](#demo) · [Quick Start](#-quick-start) · [Report a Bug](../../issues)**
 
-## Overview
-
-Sepsis is a **life-threatening medical emergency** — killing over 270,000 patients annually in the US alone. Every hour of delayed treatment increases mortality by 7%. Yet clinical teams are often overwhelmed, and early warning signs are easy to miss.
-
-This project builds a **real-time ICU clinical decision support tool** that:
-
-- Predicts the **probability of sepsis onset within 6 hours** from 17 clinical parameters
-- Achieves **AUROC 0.8158** on the PhysioNet 2019 benchmark dataset (40,336 ICU patients)
-- Provides **SHAP-based explainability** — clinicians see exactly *which vital sign* drove the alert
-- Computes **SIRS criteria, SOFA score approximation, and Shock Index** automatically
-- Delivers **actionable clinical recommendations** (SEP-1 bundle, fluid targets, lab orders)
+</div>
 
 ---
 
-## Demo
+## 🎯 What This Is
 
-| Scenario | Risk Score | Key Drivers |
-|----------|-----------|-------------|
-| 🟢 Normal Patient (Age 45) | **12.3%** | All vitals within normal range |
-| 🟡 Moderate Risk (HR 105, Lactate 3.2) | **44.7%** | Elevated lactate + tachycardia |
-| 🔴 High Risk / Sepsis (MAP 48, pH 7.19) | **87.6%** | Hypotension + acidosis + hyperlactatemia |
+A machine learning system that predicts ICU sepsis onset **6 hours before clinical symptoms** appear, built on 40,336 real patient records from the PhysioNet CinC 2019 Challenge.
 
----
+The dashboard features a **clickable interactive organ body heatmap** — click any organ (Heart, Lungs, Kidneys, Liver, Brain) to see its sepsis risk percentage, affected biomarkers, SHAP contributions, and clinical notes. Every prediction is explained, not just scored.
 
-## Features
-
-### 🤖 Machine Learning
-- **Model:** XGBoost Classifier, trained on 40,336 ICU patient records
-- **AUROC:** 0.8158 | Sensitivity: 0.74 | Specificity: 0.81
-- **Features:** 17 clinical parameters (vitals, labs, patient history)
-- **Explainability:** SHAP TreeExplainer — per-patient feature contribution waterfall charts
-- **Prediction window:** 6-hour early warning before sepsis onset
-
-### 📊 Clinical Scoring (Computed in Real-Time)
-| Score | What It Measures |
-|-------|-----------------|
-| **SIRS Criteria (0–4)** | Systemic Inflammatory Response Syndrome criteria met |
-| **SOFA Score (approx)** | Sequential Organ Failure Assessment (respiration, liver, CV, renal) |
-| **Shock Index** | HR / SBP ratio — proxy for circulatory compromise |
-| **Lactate Status** | Tissue perfusion flag: normal / elevated / critical |
-
-### 🖥️ Dashboard
-- Live risk gauge with animated pulse ring (green / amber / red)
-- Vitals status grid — color-coded by normal / abnormal / critical range
-- SHAP feature importance bar chart (top 12 + all 17 features)
-- Radar chart — patient vitals vs. normal baseline
-- SIRS criteria breakdown (4 individual criteria)
-- Model probability distribution
-- Evidence-based clinical recommendations (SEP-1 bundle protocol)
-- 3 preset scenarios for instant demo (Normal / Moderate / High Risk)
-- Manual entry, preset loader, and `.txt` file upload modes
+> ⚠️ **Clinical Disclaimer:** This system is for research and educational demonstration only. It has not been prospectively validated in a clinical trial and must not be used for independent clinical decision-making.
 
 ---
 
-## Dataset
+## ✨ Features
+
+| Feature | Details |
+|---------|---------|
+| 🎯 **Real-time Prediction** | XGBoost model — AUROC 0.8158, 6-hour prediction window |
+| 🫀 **Organ Body Heatmap** | Interactive SVG — 6 organs, heat-map colors derived from model output |
+| 🔬 **SHAP Explainability** | Per-patient feature attribution via TreeExplainer (17 features) |
+| 📊 **Clinical Scores** | SIRS (4 criteria), SOFA score, Shock Index — computed live |
+| 📄 **PDF Export** | Multi-page clinical report via ReportLab |
+| 📊 **Excel Export** | 5-sheet workbook via openpyxl |
+| 🌗 **Light Theme** | Clean, professional clinical UI |
+| ⚡ **3 Input Modes** | Manual entry / Preset scenarios / .txt file upload |
+
+---
+
+## 🖥️ Demo
+
+> **[🔗 Live App — Streamlit Cloud](#)** ← *Replace with your deployed URL after `streamlit run`*
+
+### Screenshots
+
+<table>
+<tr>
+<td width="50%">
+
+**Tab 1 — Risk Dashboard**
+![Risk Dashboard](docs/screenshots/tab1_risk_dashboard.png)
+*HIGH RISK patient — pulsing red card, SHAP top-12, vitals grid*
+
+</td>
+<td width="50%">
+
+**Tab 2 — Body Heatmap**
+![Body Heatmap](docs/screenshots/tab2_body_heatmap.png)
+*Organ heatmap — click any organ for detailed biomarker breakdown*
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Tab 3 — SHAP Analysis**
+![SHAP Analysis](docs/screenshots/tab3_shap.png)
+*All 17 features ranked by SHAP value — cumulative waterfall*
+
+</td>
+<td width="50%">
+
+**Tab 4 — Export**
+![Export](docs/screenshots/tab4_export.png)
+*One-click PDF + Excel clinical report generation*
+
+</td>
+</tr>
+</table>
+
+> 📸 *Create `docs/screenshots/` folder and add screenshots after local setup*
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+```
+Python 3.10+
+Git
+```
+
+### Installation
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/zaidautomates/sepsis-early-warning-system.git
+cd sepsis-early-warning-system
+
+# 2. Create virtual environment
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# macOS/Linux
+source venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Run the dashboard
+streamlit run streamlit_app/app.py
+```
+
+### requirements.txt
+
+```
+streamlit>=1.30.0
+numpy>=1.24.0
+pandas>=2.0.0
+joblib>=1.3.0
+xgboost>=2.0.0
+shap>=0.44.0
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+openpyxl>=3.1.0
+reportlab>=4.0.0
+torch>=2.0.0
+imbalanced-learn>=0.11.0
+pyarrow>=12.0.0
+```
+
+> ⚠️ **Note:** You need trained model files in `models/`. Generate them by running the notebooks in order (see [Notebook Guide](#-notebooks) below).
+
+---
+
+## 🗂️ Project Structure
+
+```
+sepsis-early-warning-system/
+│
+├── 📁 data/
+│   ├── setA/                        ← Raw .psv files (PhysioNet download)
+│   ├── setB/                        ← Raw .psv files (PhysioNet download)
+│   ├── combined_dataset.parquet     ← 40,336 patients combined (16.5 MB)
+│   ├── X_test.npy                   ← Test features (generated by notebook 02b)
+│   ├── y_test.npy                   ← Test labels
+│   ├── X_train_sm.npy               ← SMOTE-balanced train features
+│   └── y_train_sm.npy               ← SMOTE-balanced train labels
+│
+├── 📁 models/
+│   ├── xgboost_model.pkl            ← PRIMARY MODEL (AUROC 0.8158)
+│   ├── logistic_regression.pkl      ← Baseline model
+│   ├── scaler.pkl                   ← StandardScaler (fit on train only — never refit on test)
+│   └── feature_list.json            ← 17 feature names in inference order
+│
+├── 📁 notebooks/
+│   ├── 01_data_exploration.ipynb    ← EDA, missing values, class distribution
+│   ├── 02b_model_fix.ipynb          ← Feature engineering, SMOTE, LR + XGBoost training
+│   └── 03_lstm_shap.ipynb           ← SHAP analysis + LSTM PyTorch experiment
+│
+├── 📁 streamlit_app/
+│   └── app.py                       ← Dashboard v5.0 (1,635 lines)
+│
+├── 📁 outputs/
+│   ├── 03_model_comparison_final.csv
+│   └── [SHAP plots, model comparison charts]
+│
+├── 📁 docs/
+│   └── screenshots/                 ← Add your screenshots here
+│
+├── requirements.txt
+├── README.md
+└── LICENSE
+```
+
+---
+
+## 📓 Notebooks
+
+Run in this exact order to reproduce all results:
+
+| # | Notebook | Purpose | Key Output |
+|---|----------|---------|------------|
+| 1 | `01_data_exploration.ipynb` | Load PhysioNet .psv files, EDA, visualize missing values and class distribution | `data/combined_dataset.parquet` |
+| 2 | `02b_model_fix.ipynb` | 17-feature selection, GroupShuffleSplit, SMOTE, StandardScaler, train LR + XGBoost | `models/xgboost_model.pkl`, `scaler.pkl`, `feature_list.json` |
+| 3 | `03_lstm_shap.ipynb` | SHAP TreeExplainer on XGBoost, LSTM PyTorch experiment | SHAP plots, `outputs/03_model_comparison_final.csv` |
+
+---
+
+## 🧠 Model Performance
+
+| Model | AUROC | F1 Score | Status | Notes |
+|-------|-------|----------|--------|-------|
+| Logistic Regression | 0.7336 | 0.000 | Baseline | Threshold tuning needed |
+| **XGBoost** | **0.8158** | **0.062** | ✅ **PRIMARY** | Matches PhysioNet 2019 benchmark |
+| LSTM PyTorch | 0.5009 | 0.000 | Did not converge | Sequence alignment error during GPU upload |
+
+**XGBoost configuration:**
+
+```python
+XGBClassifier(
+    n_estimators=500,        # Early stopped at tree 148
+    max_depth=6,
+    learning_rate=0.05,
+    subsample=0.8,
+    colsample_bytree=0.8,
+    scale_pos_weight=12,     # Handles 7.3% class imbalance
+    eval_metric='aucpr',
+    early_stopping_rounds=50
+)
+```
+
+**Top SHAP features (mean |SHAP value| across 5,000 test patients):**
+
+| Rank | Feature | Mean \|SHAP\| | Direction |
+|------|---------|--------------|-----------|
+| 1 | O₂ Saturation | 0.605 | ↓ Protective when normal |
+| 2 | ICU LOS | 0.486 | ↑ Longer stay = higher risk |
+| 3 | Blood pH | 0.283 | ↓ Acidosis signals hypoperfusion |
+| 4 | Hospital Admission Time | 0.263 | ↓ Emergency admissions riskier |
+| 5 | Hemoglobin | 0.174 | ↓ Anemia compounds hypoxia |
+
+---
+
+## 📊 Dataset
 
 **PhysioNet Computing in Cardiology Challenge 2019**
 
 | Property | Value |
 |----------|-------|
-| Total patients | 40,336 |
-| ICU types | Medical, surgical, cardiac ICUs |
-| Sepsis labels | Derived using Sepsis-3 clinical definition |
-| Input features | 17 (8 vital signs + 6 lab values + 3 demographics) |
-| Time resolution | Hourly readings |
-| Positive class | ~5.7% (sepsis onset) |
+| Patients | 40,336 (Hospital System A + B) |
+| Rows | 1,552,210 (hourly timesteps) |
+| Features | 43 original → 17 selected |
+| Sepsis rate | 7.3% (1:13 class imbalance) |
+| Format | .psv (pipe-separated values, one file per patient) |
 
-**17 Clinical Features:**
+**Access:** Download requires free PhysioNet account registration at [physionet.org/content/challenge-2019](https://physionet.org/content/challenge-2019/1.0.0/)
 
-| Category | Features |
-|----------|----------|
-| Vital Signs | HR, O₂ Saturation, Temperature, Respiratory Rate |
-| Blood Pressure | SBP, DBP, MAP |
-| Laboratory | WBC, Creatinine, Bilirubin, Lactate, Glucose, Hemoglobin, pH |
-| Patient Context | Age, Hospital Admission Time Offset, ICU Length of Stay |
-
----
-
-## Project Structure
-
-```
-sepsis-early-warning-system/
-│
-├── streamlit_app/
-│   └── app.py                  # Main Streamlit dashboard (v2.0)
-│
-├── models/
-│   ├── xgboost_model.pkl       # Trained XGBoost classifier
-│   ├── scaler.pkl              # StandardScaler for feature normalization
-│   └── feature_list.json      # Ordered list of 17 feature names
-│
-├── notebooks/
-│   ├── 01_data_exploration.ipynb
-│   ├── 02_preprocessing.ipynb
-│   ├── 03_model_training.ipynb
-│   └── 04_shap_analysis.ipynb
-│
-├── data/
-│   └── README.md               # PhysioNet dataset instructions
-│
-├── requirements.txt
-└── README.md
-```
-
----
-
-## Installation & Setup
-
-### 1. Clone the repository
 ```bash
-git clone https://github.com/zaidautomates/sepsis-early-warning-system.git
-cd sepsis-early-warning-system
+# Download to:
+data/setA/   ← Hospital System A (20,336 patients)
+data/setB/   ← Hospital System B (20,000 patients)
+
+# Then run notebook 01 to generate combined_dataset.parquet
 ```
 
-### 2. Install dependencies
+---
+
+## 🛠️ Tech Stack
+
+| Category | Tools |
+|----------|-------|
+| Language | Python 3.10, Jupyter Notebook |
+| ML Models | XGBoost, scikit-learn |
+| Deep Learning | PyTorch (LSTM) |
+| Explainability | SHAP (TreeExplainer) |
+| Class Balancing | imbalanced-learn (SMOTE) |
+| Data Processing | pandas, numpy, pyarrow |
+| Dashboard | Streamlit |
+| PDF Export | ReportLab |
+| Excel Export | openpyxl |
+| Visualization | matplotlib |
+| Version Control | Git, GitHub |
+
+---
+
+## 🏗️ System Architecture
+
+```
+Patient Vitals Input (17 features)
+         │
+         ▼
+  StandardScaler.transform()     ← CRITICAL: scale before inference
+         │
+         ▼
+  XGBoost.predict_proba()
+         │
+    ┌────┴────┐
+    ▼         ▼
+ Risk Score  SHAP TreeExplainer
+(0–100%)    (per-feature attribution)
+    │              │
+    ▼              ▼
+  Risk Card    SHAP Charts
+  SIRS/SOFA    Feature Table
+  Vitals Grid  Waterfall
+    │
+    ▼
+  Organ Heatmap (6 regions)
+  organ_risk = base_risk + derangement_bonus
+    │
+    ▼
+  PDF / Excel Export
+```
+
+> **⚠️ Important implementation note:** `scaler.pkl` must be applied via `scaler.transform()` before passing features to the model. Skipping this step produces systematically wrong predictions (tested: 23 percentage point error on normal patients).
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome!
+
 ```bash
-pip install -r requirements.txt
+# 1. Fork this repository
+# 2. Create your feature branch
+git checkout -b feature/your-feature-name
+
+# 3. Commit changes
+git commit -m "Add: description of your change"
+
+# 4. Push and open a Pull Request
+git push origin feature/your-feature-name
 ```
 
-### 3. Add model files
-Place the following in the `models/` directory:
-```
-models/xgboost_model.pkl
-models/scaler.pkl
-models/feature_list.json
-```
+**Priority areas for contribution:**
 
-### 4. Run the dashboard
-```bash
-streamlit run streamlit_app/app.py
-```
-
-Open `http://localhost:8501` in your browser.
+- [ ] Fix LSTM sequence alignment and retrain on Kaggle GPU (target AUROC >0.84)
+- [ ] MIMIC-III cross-hospital validation (requires PhysioNet credentialing)
+- [ ] Urdu language UI for Pakistani clinical deployment
+- [ ] HL7 FHIR real-time EHR integration (auto-predictions every hour)
+- [ ] Transformer / self-attention architecture (target AUROC >0.86)
+- [ ] Add unit tests for preprocessing pipeline
 
 ---
 
-## Requirements
+## 📚 References
 
-```
-streamlit>=1.35.0
-numpy>=1.24.0
-pandas>=2.0.0
-scikit-learn>=1.3.0
-xgboost>=2.0.0
-shap>=0.44.0
-matplotlib>=3.7.0
-joblib>=1.3.0
-```
+1. Reyna, M. et al. (2020). Early prediction of sepsis from clinical data. *Critical Care Medicine*, 48(2), 210–217.
+2. Singer, M. et al. (2016). The Third International Consensus Definitions for Sepsis (Sepsis-3). *JAMA*, 315(8), 801–810.
+3. Fleuren, L. et al. (2020). Machine learning for the prediction of sepsis. *Intensive Care Medicine*, 46(3), 383–400.
+4. Lundberg, S. & Lee, S. (2017). A unified approach to interpreting model predictions. *NeurIPS 2017*.
+5. Chawla, N. et al. (2002). SMOTE: Synthetic Minority Over-sampling Technique. *JMLR*, 6(1), 321–357.
+6. Chen, T. & Guestrin, C. (2016). XGBoost: A scalable tree boosting system. *KDD 2016*.
 
 ---
 
-## Model Performance
+## 📄 License
 
-| Metric | Value |
-|--------|-------|
-| AUROC | **0.8158** |
-| Sensitivity (Recall) | 0.74 |
-| Specificity | 0.81 |
-| Precision | 0.29 |
-| F1 Score | 0.42 |
-
-> The model prioritizes **sensitivity** — in a clinical setting, missing a sepsis case (false negative) is far more dangerous than a false alarm.
+This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
 
 ---
 
-## Clinical Interpretation Guide
-
-| Risk Level | Score | Recommended Action |
-|------------|-------|--------------------|
-| 🟢 Low | < 30% | Routine monitoring. Reassess every 4 hours. |
-| 🟡 Moderate | 30–60% | Increased vigilance. Order labs. Reassess every 30 min. |
-| 🔴 High | > 60% | Activate Sepsis Alert. SEP-1 bundle. Physician review immediately. |
-
-**SIRS + AI Risk = Clinical Decision:**
-- SIRS ≥ 2 criteria + Risk > 30% → Strong indication for sepsis workup
-- SOFA ≥ 2 above baseline + Risk > 60% → Sepsis-3 criteria likely met
-
----
-
-## ⚠️ Disclaimer
-
-This system is a **clinical decision support tool** — it assists, it does not replace, physician judgment. All AI-generated risk scores and recommendations must be reviewed by a qualified healthcare professional before clinical action is taken.
-
----
-
-## Author
+## 👤 Author
 
 **Zaid Ali**
-BS Computer Science
+
+- 🎓 BS Computer Science — 6th Semester, AWKUM (2023–2027) | CGPA 3.56
+- 💼 AI Automation Developer & ML Engineer
+- 🌐 **Portfolio:** [zaidautomates.com](https://www.zaidautomates.com)
+- 🔗 **LinkedIn:** [linkedin.com/in/zaidautomates](https://linkedin.com/in/zaidautomates)
+- 📧 automate.zaid@gmail.com
 
 ---
+
+## 🙏 Acknowledgments
+
+- **PhysioNet** and the Computing in Cardiology Challenge 2019 organizers for the open-access dataset
+- **Reyna et al. (2020)** for the benchmark performance reference used as validation
+- **SHAP library** (Lundberg & Lee) for making ML predictions interpretable
+- **XGBoost team** for the gradient boosting framework
+- **AWKUM AI & ML faculty** for course guidance and project feedback
+
+---
+
+<div align="center">
+
+**If this project was useful, please ⭐ star the repository**
+
+*Built with ❤️ by Zaid — for ICUs that cannot afford commercial tools*
+
+[![GitHub stars](https://img.shields.io/github/stars/zaidautomates/sepsis-early-warning-system?style=social)](https://github.com/zaidautomates/sepsis-early-warning-system)
+
+</div>
