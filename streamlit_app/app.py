@@ -219,6 +219,196 @@ section[data-testid="stSidebar"] input[type="number"]:focus { border-color: var(
 
 """, unsafe_allow_html=True)
 
+# ═══ PREMIUM UI ENHANCEMENTS ═══
+st.markdown("""
+<style>
+/* ── New tokens ── */
+:root {
+  --purple: #8b5cf6; --purple-lt: rgba(139,92,246,0.12); --purple-glow: rgba(139,92,246,0.3);
+  --grad-main: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 50%, #8b5cf6 100%);
+  --grad-main-rev: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 50%, #0ea5e9 100%);
+  --shadow-glow: 0 0 24px rgba(14,165,233,0.25), 0 8px 32px rgba(59,130,246,0.15);
+  --shadow-purple: 0 0 24px rgba(139,92,246,0.25), 0 8px 32px rgba(139,92,246,0.15);
+}
+
+/* ── New keyframes ── */
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes gradFlow { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+@keyframes ripple { 0%{transform:scale(0);opacity:0.6} 100%{transform:scale(2.5);opacity:0} }
+@keyframes progGlow { 0%,100%{box-shadow:0 0 8px rgba(14,165,233,0.6)} 50%{box-shadow:0 0 20px rgba(139,92,246,0.8)} }
+@keyframes sectionIn { from{opacity:0;transform:translateY(12px) scale(0.99)} to{opacity:1;transform:none} }
+@keyframes countUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+/* ── Streamlit button → pill gradient ── */
+.stButton > button {
+  border-radius: 50px !important;
+  background: var(--grad-main) !important;
+  background-size: 200% 200% !important;
+  color: #fff !important;
+  border: none !important;
+  font-weight: 700 !important;
+  font-family: 'Inter', sans-serif !important;
+  letter-spacing: 0.3px !important;
+  padding: 10px 28px !important;
+  transition: all 0.35s cubic-bezier(0.4,0,0.2,1) !important;
+  box-shadow: 0 4px 15px rgba(14,165,233,0.35) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  animation: gradFlow 6s ease infinite !important;
+}
+.stButton > button:hover {
+  transform: translateY(-2px) scale(1.03) !important;
+  box-shadow: var(--shadow-glow) !important;
+  background-position: 100% 50% !important;
+}
+.stButton > button:active {
+  transform: translateY(0) scale(0.97) !important;
+  box-shadow: 0 2px 8px rgba(14,165,233,0.2) !important;
+}
+/* ripple layer */
+.stButton > button::after {
+  content: '' !important;
+  position: absolute !important;
+  width: 100% !important; height: 100% !important;
+  top: 0 !important; left: 0 !important;
+  background: radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 60%) !important;
+  transform: scale(0) !important;
+  opacity: 0 !important;
+  transition: transform 0.5s, opacity 0.5s !important;
+  border-radius: 50px !important;
+}
+.stButton > button:active::after { animation: ripple 0.5s ease-out !important; }
+
+/* ── Sidebar analyze button — accent ── */
+section[data-testid="stSidebar"] .stButton > button {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0891b2 100%) !important;
+  background-size: 200% 200% !important;
+  animation: gradFlow 8s ease infinite !important;
+}
+
+/* ── Tab: animated gradient active indicator ── */
+.stTabs [data-baseweb="tab-list"] {
+  background: rgba(248,250,252,0.8) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-radius: 14px !important;
+  padding: 6px !important;
+  border: 1px solid var(--border) !important;
+  gap: 6px !important;
+}
+.stTabs [data-baseweb="tab"] {
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  color: var(--text2) !important;
+  padding: 10px 18px !important;
+  transition: all 0.35s cubic-bezier(0.4,0,0.2,1) !important;
+  border: 1px solid transparent !important;
+  position: relative !important;
+}
+.stTabs [data-baseweb="tab"]:hover {
+  color: var(--teal) !important;
+  background: rgba(14,165,233,0.08) !important;
+  transform: translateY(-1px) !important;
+}
+.stTabs [aria-selected="true"] {
+  background: var(--grad-main) !important;
+  background-size: 200% 200% !important;
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(14,165,233,0.4) !important;
+  border: none !important;
+  animation: gradFlow 5s ease infinite !important;
+}
+
+/* ── Glassmorphism panels ── */
+.stat-card, .score-box, .organ-risk-card, .vital-chip, .sirs-wrap, .scores-box, .i-box {
+  background: rgba(255,255,255,0.72) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  border: 1px solid rgba(255,255,255,0.55) !important;
+}
+@media (prefers-color-scheme: dark) {
+  .stat-card, .score-box, .organ-risk-card, .vital-chip, .sirs-wrap, .scores-box, .i-box {
+    background: rgba(17,24,39,0.65) !important;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+  }
+}
+
+/* ── Stat-card glow on hover ── */
+.stat-card:hover {
+  box-shadow: var(--shadow-glow) !important;
+  border-color: rgba(14,165,233,0.4) !important;
+  transform: translateY(-6px) !important;
+}
+.score-box:hover {
+  box-shadow: var(--shadow-purple) !important;
+  border-color: rgba(139,92,246,0.3) !important;
+}
+
+/* ── Progress bar glow sweep ── */
+.prog-fill {
+  background: var(--grad-main) !important;
+  background-size: 200% 200% !important;
+  animation: gradFlow 4s ease infinite, progGlow 3s ease-in-out infinite !important;
+  transition: width 1.4s cubic-bezier(0.4,0,0.2,1) !important;
+}
+
+/* ── Smooth section entry ── */
+[data-testid="stVerticalBlock"] > div { animation: sectionIn 0.45s ease-out both; }
+
+/* ── Stat numbers animate in ── */
+.stat-num, .score-num, .risk-pct, .organ-risk-value { animation: countUp 0.6s ease-out both; }
+
+/* ── Summary bar gradient ── */
+.a-high { background: linear-gradient(135deg, #fee2e2, #fecaca) !important; border-color: rgba(239,68,68,0.4) !important; }
+.a-mod  { background: linear-gradient(135deg, #fef3c7, #fde68a) !important; border-color: rgba(245,158,11,0.4) !important; }
+.a-low  { background: linear-gradient(135deg, #d1fae5, #a7f3d0) !important; border-color: rgba(16,185,129,0.4) !important; }
+.a-info { background: linear-gradient(135deg, #dbeafe, #bfdbfe) !important; border-color: rgba(59,130,246,0.4) !important; }
+
+/* ── Summary bar itself ── */
+.summary-bar {
+  background: var(--grad-main) !important;
+  background-size: 200% 200% !important;
+  animation: gradFlow 6s ease infinite, fadeUp 0.6s ease-out !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: var(--shadow-glow) !important;
+  border-radius: 14px !important;
+}
+.summary-bar.a-high { background: linear-gradient(135deg,#dc2626,#b91c1c,#991b1b) !important; }
+.summary-bar.a-mod  { background: linear-gradient(135deg,#d97706,#b45309,#92400e) !important; }
+.summary-bar.a-low  { background: linear-gradient(135deg,#059669,#047857,#065f46) !important; }
+
+/* ── Rec-card slide enhancement ── */
+.rec-card { transition: transform 0.35s cubic-bezier(0.4,0,0.2,1), box-shadow 0.35s ease !important; }
+.rec-card:hover { transform: translateX(8px) !important; box-shadow: var(--shadow-glow) !important; }
+
+/* ── Step card gradient border on hover ── */
+.step-card { transition: all 0.4s cubic-bezier(0.4,0,0.2,1) !important; }
+.step-card:hover { border-color: transparent !important; box-shadow: var(--shadow-glow) !important; outline: 2px solid rgba(14,165,233,0.5) !important; }
+
+/* ── Footer gradient line ── */
+.footer { border-top: 2px solid transparent !important; border-image: var(--grad-main) 1 !important; }
+
+/* ── Download buttons ── */
+[data-testid="stDownloadButton"] > button {
+  border-radius: 50px !important;
+  background: linear-gradient(135deg,#0f172a,#1e3a8a,#0891b2) !important;
+  background-size: 200% 200% !important;
+  color: #fff !important; border: none !important;
+  font-weight: 700 !important;
+  transition: all 0.35s ease !important;
+  box-shadow: 0 4px 14px rgba(8,145,178,0.3) !important;
+  animation: gradFlow 8s ease infinite !important;
+}
+[data-testid="stDownloadButton"] > button:hover {
+  transform: translateY(-2px) scale(1.03) !important;
+  box-shadow: var(--shadow-glow) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
 # ═══ MODEL LOADING ═══
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 _MODEL_DIR = os.path.join(_APP_DIR, '..', 'models')
