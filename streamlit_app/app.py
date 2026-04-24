@@ -1,5 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Sepsis Early Warning System — ICU Dashboard v6.0
+# Author : Zaid Ali | Roll No. 40 | BS CS 6th Semester | AWKUM 2025–26
 # Model  : XGBoost | AUROC 0.8158 | 6-Hour Early Prediction
 # ─────────────────────────────────────────────────────────────────────────────
 import streamlit as st, numpy as np, joblib, json, shap, time, io, base64, os
@@ -7,7 +8,7 @@ import streamlit.components.v1 as st_html
 import matplotlib; matplotlib.use('Agg')
 import matplotlib.pyplot as plt, matplotlib.patches as mpatches
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors as rl_colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -440,8 +441,9 @@ def generate_pdf(inp,risk_pct,feat_imp,sirs_dict,sofa,si,organ_data, patient_nam
     story.append(Paragraph("Clinical Risk Assessment Report",ss))
     story.append(HRFlowable(width="100%",thickness=2,color=TEAL,spaceAfter=14))
     # Fix Patient Name Layout using Table
+    local_time = datetime.now() + timedelta(hours=5)
     header_data = [[Paragraph(f"<b>Patient Name:</b> {patient_name}", bs),
-                    Paragraph(f"<b>Date:</b> {datetime.now().strftime('%B %d, %Y %H:%M')}", ParagraphStyle('R', parent=bs, alignment=2))]] # alignment=2 is RIGHT
+                    Paragraph(f"<b>Date:</b> {local_time.strftime('%B %d, %Y %H:%M')}", ParagraphStyle('R', parent=bs, alignment=2))]] # alignment=2 is RIGHT
     header_table = Table(header_data, colWidths=[10*cm, 7*cm])
     header_table.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -496,113 +498,85 @@ def generate_pdf(inp,risk_pct,feat_imp,sirs_dict,sofa,si,organ_data, patient_nam
     doc.build(story);buf.seek(0);return buf.read()
 
 # ═══ REALISTIC ANATOMICAL BODY MAP (SVG) ═══
-def render_body_map(organ_data, selected_organ=None, height=760):
+def render_body_map(organ_data, selected_organ, height=580):
     def risk_color(o):
         r = organ_data[o]['risk']
-        if r >= 60: return '#ef4444' # Red
-        if r >= 30: return '#f59e0b' # Amber
-        return '#10b981' # Green
+        return '#dc2626' if r >= 60 else '#d97706' if r >= 30 else '#059669'
+    
+    def line_style(o):
+        is_sel = (o == selected_organ)
+        color = '#ffffff' if is_sel else 'rgba(100, 116, 139, 0.4)'
+        width = '4' if is_sel else '2'
+        shadow = 'filter="url(#glow)"' if is_sel else ''
+        anim = 'style="animation: pulseOrgan 2.5s infinite;"' if is_sel else ''
+        return f'stroke="{color}" stroke-width="{width}" {shadow} {anim}'
 
-    def base_color(o):
-        return {
-            'Brain': '#e0f2fe', 'Lungs': '#bae6fd', 'Heart': '#fca5a5', 
-            'Liver': '#fed7aa', 'Kidneys': '#fef3c7', 'Blood': '#fee2e2'
-        }.get(o, '#ffffff')
+    def text_style(o):
+        is_sel = (o == selected_organ)
+        color = '#ffffff' if is_sel else '#64748b'
+        weight = '900' if is_sel else 'bold'
+        size = '28' if is_sel else '22'
+        shadow = 'filter="url(#glow)"' if is_sel else ''
+        anim = 'style="animation: pulseOrgan 2.5s infinite;"' if is_sel else ''
+        return f'fill="{color}" font-weight="{weight}" font-size="{size}" {shadow} {anim}'
 
-    svg = f"""
-<svg viewBox="0 0 400 800" xmlns="http://www.w3.org/2000/svg" style="background: radial-gradient(circle at 50% 30%, #1e293b 0%, #0f172a 100%); border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);">
-  <defs>
-    <filter id="organGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="3" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
-    <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#334155;stop-opacity:0.6" />
-      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:0.8" />
-    </linearGradient>
-    <style>
-      @keyframes pulse {{ 0% {{ opacity: 0.6; transform: scale(1); }} 50% {{ opacity: 1; transform: scale(1.05); }} 100% {{ opacity: 0.6; transform: scale(1); }} }}
-      .organ {{ transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }}
-      .organ:hover {{ filter: url(#organGlow); transform: scale(1.02); }}
-      .critical {{ animation: pulse 2s infinite ease-in-out; }}
-      .label-text {{ font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700; fill: #94a3b8; letter-spacing: 1px; }}
-      .risk-text {{ font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800; }}
-    </style>
-  </defs>
+    import base64
+    import os
+    img_path = os.path.join(os.path.dirname(__file__), "latest_stitch_body.png")
+    bg_style = 'background:radial-gradient(circle at 50% 50%, #1e293b 0%, #020617 100%);border-radius:16px;border:1px solid #334155;box-shadow:0 10px 30px rgba(0,0,0,0.5)'
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            b64_img = base64.b64encode(f.read()).decode("utf-8")
+        bg_style = f'background: url(data:image/png;base64,{b64_img}) no-repeat center center; background-size: cover; border-radius:16px; border:1px solid #334155; box-shadow:0 10px 30px rgba(0,0,0,0.5)'
 
-  <!-- Anatomical Silhouette -->
-  <path d="M200,40 C170,40 160,60 160,85 C160,105 165,120 180,125 C175,128 170,135 150,135 C120,135 90,150 75,170 C60,190 50,240 45,300 C40,360 35,420 40,460 C45,500 60,500 70,480 C75,440 85,380 90,320 C95,280 110,240 120,230 C125,270 125,340 130,400 C135,460 145,540 140,640 C135,700 130,730 150,750 C170,770 190,770 195,750 C200,730 195,700 200,600 C205,700 200,730 205,750 C210,770 230,770 250,750 C270,730 265,700 260,640 C255,540 265,460 270,400 C275,340 275,270 280,230 C290,240 305,280 310,320 C315,380 325,440 330,480 C340,500 355,500 360,460 C365,420 360,360 355,300 C350,240 340,190 325,170 C310,150 280,135 250,135 C230,135 225,128 220,125 C235,120 240,105 240,85 C240,60 230,40 200,40 Z" fill="url(#bodyGradient)" stroke="#475569" stroke-width="2"/>
+    svg = f"""<!DOCTYPE html><html><head><style>
+    @keyframes pulseOrgan {{ 0% {{ filter: drop-shadow(0 0 10px rgba(255,255,255,0.8)); opacity: 1; }} 50% {{ filter: drop-shadow(0 0 25px rgba(255,255,255,1)); opacity: 1; }} 100% {{ filter: drop-shadow(0 0 10px rgba(255,255,255,0.8)); opacity: 1; }} }}
+    .organ {{ transition: all 0.3s ease; }}
+    </style></head><body style="margin:0;padding:0;background:transparent;display:flex;justify-content:center;align-items:center;">
+<svg viewBox="0 0 768 1376" xmlns="http://www.w3.org/2000/svg" width="100%" style="max-width:320px;height:auto;display:block;margin:auto;{bg_style}">
+<defs>
+  <filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="8" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter>
+</defs>
 
-  <!-- Skeleton / MRI Grid (Stylized) -->
-  <g opacity="0.1" stroke="#ffffff" stroke-width="1.5" fill="none">
-    <path d="M200,130 L200,420 M180,150 Q120,150 90,200 M220,150 Q280,150 310,200" />
-    <circle cx="200" cy="85" r="25" />
-    <path d="M160,250 Q200,240 240,250 M155,280 Q200,270 245,280 M150,310 Q200,300 250,310" />
-  </g>
+<!-- LEADER LABELS & CONNECTORS -->
+<g font-family="'JetBrains Mono', monospace">
+  <!-- BRAIN -->
+  <text x="140" y="128" text-anchor="end" {text_style('Brain')}>BRAIN</text>
+  <line x1="150" y1="120" x2="384" y2="120" {line_style('Brain')} stroke-dasharray="4,6" stroke-linecap="round"/>
+  <rect x="200" y="100" width="70" height="40" rx="8" fill="#0f172a" stroke="{risk_color('Brain') if selected_organ == 'Brain' else '#475569'}" stroke-width="{ '4' if selected_organ == 'Brain' else '2' }"/>
+  <text x="235" y="128" text-anchor="middle" font-size="22" font-weight="bold" fill="{risk_color('Brain')}">{organ_data['Brain']['risk']}%</text>
 
-  <!-- ORGANS -->
-  
-  <!-- Brain -->
-  <g class="organ {'critical' if organ_data['Brain']['risk'] >= 60 else ''}">
-    <path d="M180,50 C165,50 155,60 155,75 C155,90 170,95 180,95 C190,95 205,90 205,75 C205,60 195,50 180,50" fill="{base_color('Brain')}" stroke="{risk_color('Brain')}" stroke-width="3" opacity="0.9" />
-  </g>
+  <!-- LUNGS -->
+  <text x="140" y="383" text-anchor="end" {text_style('Lungs')}>LUNGS</text>
+  <line x1="150" y1="375" x2="340" y2="375" {line_style('Lungs')} stroke-dasharray="4,6" stroke-linecap="round"/>
+  <rect x="180" y="355" width="70" height="40" rx="8" fill="#0f172a" stroke="{risk_color('Lungs') if selected_organ == 'Lungs' else '#475569'}" stroke-width="{ '4' if selected_organ == 'Lungs' else '2' }"/>
+  <text x="215" y="383" text-anchor="middle" font-size="22" font-weight="bold" fill="{risk_color('Lungs')}">{organ_data['Lungs']['risk']}%</text>
 
-  <!-- Lungs -->
-  <g class="organ {'critical' if organ_data['Lungs']['risk'] >= 60 else ''}">
-    <path d="M145,160 C110,160 100,200 110,250 C120,300 160,300 175,280 C180,260 180,160 145,160 Z" fill="{base_color('Lungs')}" stroke="{risk_color('Lungs')}" stroke-width="3" opacity="0.8" />
-    <path d="M255,160 C290,160 300,200 290,250 C280,300 240,300 225,280 C220,260 220,160 255,160 Z" fill="{base_color('Lungs')}" stroke="{risk_color('Lungs')}" stroke-width="3" opacity="0.8" />
-  </g>
+  <!-- LIVER -->
+  <text x="140" y="516" text-anchor="end" {text_style('Liver')}>LIVER</text>
+  <line x1="150" y1="508" x2="322" y2="508" {line_style('Liver')} stroke-dasharray="4,6" stroke-linecap="round"/>
+  <rect x="180" y="488" width="70" height="40" rx="8" fill="#0f172a" stroke="{risk_color('Liver') if selected_organ == 'Liver' else '#475569'}" stroke-width="{ '4' if selected_organ == 'Liver' else '2' }"/>
+  <text x="215" y="516" text-anchor="middle" font-size="22" font-weight="bold" fill="{risk_color('Liver')}">{organ_data['Liver']['risk']}%</text>
 
-  <!-- Heart -->
-  <g class="organ {'critical' if organ_data['Heart']['risk'] >= 60 else ''}">
-    <path d="M205,190 C185,190 180,210 195,235 C205,250 220,240 225,225 C230,210 225,190 205,190 Z" fill="{base_color('Heart')}" stroke="{risk_color('Heart')}" stroke-width="3" opacity="1" />
-  </g>
+  <!-- HEART -->
+  <text x="628" y="423" text-anchor="start" {text_style('Heart')}>HEART</text>
+  <line x1="618" y1="415" x2="416" y2="415" {line_style('Heart')} stroke-dasharray="4,6" stroke-linecap="round"/>
+  <rect x="498" y="395" width="70" height="40" rx="8" fill="#0f172a" stroke="{risk_color('Heart') if selected_organ == 'Heart' else '#475569'}" stroke-width="{ '4' if selected_organ == 'Heart' else '2' }"/>
+  <text x="533" y="423" text-anchor="middle" font-size="22" font-weight="bold" fill="{risk_color('Heart')}">{organ_data['Heart']['risk']}%</text>
 
-  <!-- Liver -->
-  <g class="organ {'critical' if organ_data['Liver']['risk'] >= 60 else ''}">
-    <path d="M130,290 C140,270 200,270 220,285 C230,300 210,320 200,320 C160,320 130,320 130,290 Z" fill="{base_color('Liver')}" stroke="{risk_color('Liver')}" stroke-width="3" opacity="0.9" />
-  </g>
+  <!-- KIDNEYS -->
+  <text x="628" y="572" text-anchor="start" {text_style('Kidneys')}>KIDNEYS</text>
+  <line x1="618" y1="564" x2="430" y2="564" {line_style('Kidneys')} stroke-dasharray="4,6" stroke-linecap="round"/>
+  <rect x="498" y="544" width="70" height="40" rx="8" fill="#0f172a" stroke="{risk_color('Kidneys') if selected_organ == 'Kidneys' else '#475569'}" stroke-width="{ '4' if selected_organ == 'Kidneys' else '2' }"/>
+  <text x="533" y="572" text-anchor="middle" font-size="22" font-weight="bold" fill="{risk_color('Kidneys')}">{organ_data['Kidneys']['risk']}%</text>
 
-  <!-- Kidneys -->
-  <g class="organ {'critical' if organ_data['Kidneys']['risk'] >= 60 else ''}">
-    <path d="M150,330 C135,330 130,350 145,370 C160,380 170,370 165,350 C160,340 165,330 150,330 Z" fill="{base_color('Kidneys')}" stroke="{risk_color('Kidneys')}" stroke-width="2.5" opacity="0.9" />
-    <path d="M250,330 C265,330 270,350 255,370 C240,380 230,370 235,350 C240,340 235,330 250,330 Z" fill="{base_color('Kidneys')}" stroke="{risk_color('Kidneys')}" stroke-width="2.5" opacity="0.9" />
-  </g>
-
-  <!-- Blood (Vascular Lines) -->
-  <g opacity="0.4" stroke="{risk_color('Blood')}" stroke-width="2" fill="none">
-    <path d="M200,240 L200,450 M200,450 L160,700 M200,450 L240,700" />
-    <path d="M200,160 L140,230 M200,160 L260,230" />
-  </g>
-
-  <!-- LABELS -->
-  <g class="labels">
-    <line x1="150" y1="75" x2="60" y2="75" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
-    <text x="55" y="75" text-anchor="end" class="label-text">BRAIN</text>
-    <text x="55" y="92" text-anchor="end" class="risk-text" fill="{risk_color('Brain')}">{organ_data['Brain']['risk']}%</text>
-
-    <line x1="110" y1="200" x2="60" y2="200" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
-    <text x="55" y="200" text-anchor="end" class="label-text">LUNGS</text>
-    <text x="55" y="217" text-anchor="end" class="risk-text" fill="{risk_color('Lungs')}">{organ_data['Lungs']['risk']}%</text>
-
-    <line x1="225" y1="215" x2="340" y2="215" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
-    <text x="345" y="215" text-anchor="start" class="label-text">HEART</text>
-    <text x="345" y="232" text-anchor="start" class="risk-text" fill="{risk_color('Heart')}">{organ_data['Heart']['risk']}%</text>
-
-    <line x1="220" y1="290" x2="340" y2="290" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
-    <text x="345" y="290" text-anchor="start" class="label-text">LIVER</text>
-    <text x="345" y="307" text-anchor="start" class="risk-text" fill="{risk_color('Liver')}">{organ_data['Liver']['risk']}%</text>
-
-    <line x1="140" y1="350" x2="60" y2="350" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
-    <text x="55" y="350" text-anchor="end" class="label-text">KIDNEYS</text>
-    <text x="55" y="367" text-anchor="end" class="risk-text" fill="{risk_color('Kidneys')}">{organ_data['Kidneys']['risk']}%</text>
-
-    <line x1="200" y1="450" x2="340" y2="450" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
-    <text x="345" y="450" text-anchor="start" class="label-text">BLOOD</text>
-    <text x="345" y="467" text-anchor="start" class="risk-text" fill="{risk_color('Blood')}">{organ_data['Blood']['risk']}%</text>
-  </g>
-</svg>
-"""
+  <!-- BLOOD -->
+  <text x="628" y="808" text-anchor="start" {text_style('Blood')}>BLOOD</text>
+  <line x1="618" y1="800" x2="430" y2="800" {line_style('Blood')} stroke-dasharray="4,6" stroke-linecap="round"/>
+  <rect x="540" y="780" width="70" height="40" rx="8" fill="#0f172a" stroke="{risk_color('Blood') if selected_organ == 'Blood' else '#475569'}" stroke-width="{ '4' if selected_organ == 'Blood' else '2' }"/>
+  <text x="575" y="808" text-anchor="middle" font-size="22" font-weight="bold" fill="{risk_color('Blood')}">{organ_data['Blood']['risk']}%</text>
+</g>
+</svg></body></html>"""
     return svg
 
 
@@ -693,9 +667,10 @@ if st.session_state.risk_pct is not None:
 
     # ── Stats row
     c1,c2,c3,c4,c5=st.columns(5)
+    local_time_str = (datetime.now() + timedelta(hours=5)).strftime('%H:%M:%S')
     stats=[('Sepsis Risk',f'{rp}%','risk-stat'),('SIRS Score',f'{sirs_met}/4','sirs-stat'),
            ('SOFA Score',f'{sofa}','sofa-stat'),('Shock Index',f'{si}','si-stat'),
-           ('Timestamp',datetime.now().strftime('%H:%M:%S'),'time-stat')]
+           ('Timestamp',local_time_str,'time-stat')]
     for col,(lbl,val,_) in zip([c1,c2,c3,c4,c5],stats):
         col.markdown(f'<div class="stat-card"><div class="stat-num">{val}</div><div class="stat-lbl">{lbl}</div></div>',unsafe_allow_html=True)
 
@@ -783,7 +758,7 @@ if st.session_state.risk_pct is not None:
         col_map,col_det=st.columns([1,1])
         with col_map:
             svg_html=render_body_map(organ_data,sel_organ)
-            st_html.html(svg_html, height=760, scrolling=False)
+            st_html.html(svg_html, height=580, scrolling=False)
         with col_det:
             od=organ_data[sel_organ]; risk_v=od['risk']
             oc='#dc2626' if risk_v>=60 else '#d97706' if risk_v>=30 else '#059669'

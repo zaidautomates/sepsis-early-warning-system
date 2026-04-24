@@ -4,15 +4,4 @@ __pycache__/
 .ipynb_checkpoints/
 *.pkl
 *.csv
-data/
-*.psv
-diff.txt
-extract_img.py
-old_app*.py
-streamlit_app/temp_app.py
-streamlit_app/fix.py
-streamlit_app/embed_image.py
-streamlit_app/new_body_map*.py
-streamlit_app/body_bg.*
-streamlit_app/clinical_body.png
-.gemini/
+data/*.npy
