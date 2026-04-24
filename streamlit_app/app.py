@@ -433,8 +433,8 @@ def generate_pdf(inp,risk_pct,feat_imp,sirs_dict,sofa,si,organ_data, patient_nam
     GREEN=rl_colors.HexColor('#059669');LGRAY=rl_colors.HexColor('#f5f7fa');GRAY=rl_colors.HexColor('#dde4ed')
     rc=RED if risk_pct>=60 else AMBER if risk_pct>=30 else GREEN
     lt='HIGH RISK' if risk_pct>=60 else 'MODERATE RISK' if risk_pct>=30 else 'LOW RISK'
-    ts=ParagraphStyle('T',fontName='Helvetica-Bold',fontSize=22,textColor=NAVY,spaceAfter=6,alignment=TA_CENTER)
-    ss=ParagraphStyle('S',fontName='Helvetica',fontSize=10,textColor=rl_colors.HexColor('#4a6080'),alignment=TA_CENTER,spaceAfter=18)
+    ts=ParagraphStyle('T',fontName='Helvetica-Bold',fontSize=22,textColor=NAVY,spaceAfter=12,alignment=TA_CENTER)
+    ss=ParagraphStyle('S',fontName='Helvetica',fontSize=10,textColor=rl_colors.HexColor('#4a6080'),alignment=TA_CENTER,spaceAfter=24)
     hs=ParagraphStyle('H',fontName='Helvetica-Bold',fontSize=12,textColor=TEAL,spaceBefore=16,spaceAfter=6)
     bs=ParagraphStyle('B',fontName='Helvetica',fontSize=10,textColor=rl_colors.HexColor('#1a2636'),leading=16,spaceAfter=6)
     story.append(Paragraph("SEPSIS EARLY WARNING SYSTEM",ts))
@@ -861,5 +861,5 @@ else:
 # ── Footer
 st.markdown(f"""<div class="footer">
     🏥 Sepsis Early Warning System v6.0 &nbsp;·&nbsp; Clinical Decision Support Tool<br>
-    Confidential Patient Record &nbsp;·&nbsp; {datetime.now().strftime('%B %d, %Y')}
+    Confidential Patient Record &nbsp;·&nbsp; {(datetime.now() + timedelta(hours=5)).strftime('%B %d, %Y | %I:%M %p')}
 </div>""", unsafe_allow_html=True)
