@@ -1,1330 +1,890 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Sepsis Early Warning System — ICU Dashboard v3.0
-# Author : Zaid Ali | Roll No. 40 | BS CS 6th Semester | AWKUM 2025–26
-# Dataset: PhysioNet Computing in Cardiology Challenge 2019 (40,336 patients)
+# Sepsis Early Warning System — ICU Dashboard v6.0
 # Model  : XGBoost | AUROC 0.8158 | 6-Hour Early Prediction
-# Run    : streamlit run app.py
 # ─────────────────────────────────────────────────────────────────────────────
-
-import streamlit as st
-import numpy as np
-import joblib
-import json
-import shap
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import time
+import streamlit as st, numpy as np, joblib, json, shap, time, io, base64, os
+import streamlit.components.v1 as st_html
+import matplotlib; matplotlib.use('Agg')
+import matplotlib.pyplot as plt, matplotlib.patches as mpatches
 import pandas as pd
 from datetime import datetime
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors as rl_colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-# ── Page config ───────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Sepsis EWS — ICU Dashboard",
-    page_icon="🏥",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Sepsis EWS — Clinical Dashboard", page_icon="🏥",
+                   layout="wide", initial_sidebar_state="expanded")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CSS — FIXED: readable text, proper contrast, no broken animations
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══ GLOBAL CSS ═══
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+:root {
+  --bg: #f3f6f9; --surface: #ffffff; --surface2: #f8fafc; --border: #e2e8f0; --border2: #cbd5e1;
+  --text: #0f172a; --text2: #475569; --text3: #64748b;
+  --teal: #0ea5e9; --teal-lt: #e0f2fe; --teal-glow: rgba(14,165,233,0.3);
+  --red: #ef4444; --red-lt: #fee2e2; --red-glow: rgba(239,68,68,0.3);
+  --amber: #f59e0b; --amber-lt: #fef3c7; --amber-glow: rgba(245,158,11,0.3);
+  --green: #10b981; --green-lt: #d1fae5; --blue: #3b82f6; --blue-lt: #dbeafe;
+  --shadow-sm: 0 2px 8px -2px rgba(15,23,42,0.06), 0 4px 12px -4px rgba(15,23,42,0.04);
+  --shadow-md: 0 8px 24px -6px rgba(15,23,42,0.08), 0 12px 32px -8px rgba(15,23,42,0.06);
+  --shadow-lg: 0 16px 40px -10px rgba(15,23,42,0.1), 0 24px 64px -16px rgba(15,23,42,0.08);
+  --radius: 16px; --radius-sm: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0f19; --surface: #111827; --surface2: #1f2937; --border: #374151; --border2: #4b5563;
+    --text: #f8fafc; --text2: #cbd5e1; --text3: #94a3b8;
+    --teal: #38bdf8; --teal-lt: rgba(56,189,248,0.1);
+    --red: #f87171; --red-lt: rgba(248,113,113,0.1);
+    --amber: #fbbf24; --amber-lt: rgba(251,191,36,0.1);
+    --green: #34d399; --green-lt: rgba(52,211,153,0.1); --blue: #60a5fa; --blue-lt: rgba(96,165,250,0.1);
+    --shadow-sm: 0 2px 10px rgba(0,0,0,0.3); --shadow-md: 0 8px 30px rgba(0,0,0,0.4); --shadow-lg: 0 16px 50px rgba(0,0,0,0.5);
+  }
+}
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: var(--text); -webkit-font-smoothing: antialiased; }
+.stApp { background: var(--bg); }
 
-html, body, [class*="css"] { font-family: 'Syne', sans-serif; }
+/* Improved Accessibility Focus States */
+a:focus, button:focus, input:focus, [tabindex]:focus { outline: 2px solid var(--teal) !important; outline-offset: 2px; }
 
-/* Background */
-.stApp {
-    background: #07111f;
-    color: #e0eaf2;
-}
+/* Sidebar Styling */
+section[data-testid="stSidebar"] { background: rgba(var(--surface), 0.6) !important; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-right: 1px solid var(--border) !important; }
+section[data-testid="stSidebar"] label { color: var(--text2) !important; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 0.5px !important; text-transform: uppercase; }
+section[data-testid="stSidebar"] input[type="number"] { background: var(--surface2) !important; border: 1px solid var(--border) !important; color: var(--text) !important; border-radius: 8px !important; font-family: 'JetBrains Mono', monospace !important; font-size: 14px !important; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: inset 0 1px 3px rgba(0,0,0,0.02); }
+section[data-testid="stSidebar"] input[type="number"]:focus { border-color: var(--teal) !important; background: var(--surface) !important; box-shadow: 0 0 0 4px var(--teal-lt), inset 0 1px 3px rgba(0,0,0,0.02) !important; transform: translateY(-1px); }
 
-/* Sidebar */
-section[data-testid="stSidebar"] {
-    background: #04090f !important;
-    border-right: 1px solid #0e2a3a !important;
-}
-section[data-testid="stSidebar"] label {
-    color: #7ab8c8 !important;
-    font-size: 11px !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.5px !important;
-}
-section[data-testid="stSidebar"] input[type="number"] {
-    background: #0a1c2a !important;
-    border: 1px solid #1a3a4a !important;
-    color: #e0eaf2 !important;
-    border-radius: 7px !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 13px !important;
-}
-section[data-testid="stSidebar"] .stRadio label {
-    color: #a0c8d8 !important;
-    font-size: 13px !important;
-}
-section[data-testid="stSidebar"] .stSelectbox label {
-    color: #7ab8c8 !important;
-}
+/* Advanced Animations */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes fadeScale { from { opacity: 0; transform: scale(0.96) } to { opacity: 1; transform: scale(1) } }
+@keyframes pulseRed { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4) } 70% { box-shadow: 0 0 0 16px rgba(239,68,68,0) } }
+@keyframes pulseAmber { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.3) } 70% { box-shadow: 0 0 0 14px rgba(245,158,11,0) } }
+@keyframes shimmer { 0% { left: -100% } 100% { left: 200% } }
+@keyframes float { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-8px) } }
+@keyframes glowSweep { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 
-/* Animations — clean, no broken rgba strings */
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes pulseRedGlow {
-    0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.5); }
-    50%      { box-shadow: 0 0 0 16px rgba(220,38,38,0); }
-}
-@keyframes pulseAmberGlow {
-    0%,100% { box-shadow: 0 0 0 0 rgba(217,119,6,0.4); }
-    50%      { box-shadow: 0 0 0 14px rgba(217,119,6,0); }
-}
-@keyframes pulseGreenGlow {
-    0%,100% { box-shadow: 0 0 0 0 rgba(5,150,105,0.35); }
-    50%      { box-shadow: 0 0 0 12px rgba(5,150,105,0); }
-}
-@keyframes shimmer {
-    0%   { transform: translateX(-100%); }
-    100% { transform: translateX(200%); }
-}
-@keyframes glowTeal {
-    0%,100% { text-shadow: 0 0 6px rgba(0,200,180,0.25); }
-    50%      { text-shadow: 0 0 18px rgba(0,200,180,0.7); }
-}
-@keyframes blink {
-    0%,80%,100% { opacity: 1; }
-    40%          { opacity: 0.3; }
-}
+/* Header Branding (Glass & Gradient) */
+.hdr-wrap { background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0891b2 100%); background-size: 200% 200%; border-radius: var(--radius); padding: 36px 40px; color: #fff; position: relative; overflow: hidden; margin-bottom: 20px; box-shadow: var(--shadow-md); animation: fadeScale .5s ease-out, glowSweep 15s ease infinite; border: 1px solid rgba(255,255,255,0.1); }
+.hdr-wrap::before { content: ''; position: absolute; top: -50%; left: -20%; width: 300px; height: 300px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%); animation: float 10s ease-in-out infinite; filter: blur(20px); }
+.hdr-wrap::after { content: ''; position: absolute; bottom: -30%; right: -10%; width: 250px; height: 250px; border-radius: 50%; background: radial-gradient(circle, rgba(14,165,233,0.3) 0%, transparent 70%); animation: float 8s ease-in-out infinite reverse; filter: blur(15px); }
+.hdr-title { font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 700; color: #fff; margin: 0; letter-spacing: -0.5px; line-height: 1.1; position: relative; z-index: 2; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+.hdr-sub { font-size: 15px; color: rgba(255,255,255,.85); margin: 8px 0 0; line-height: 1.6; position: relative; z-index: 2; font-weight: 300; }
+.hdr-badge { display: inline-flex; align-items: center; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 24px; padding: 6px 14px; font-size: 11.5px; font-weight: 600; color: #fff; margin-right: 12px; margin-top: 16px; text-transform: uppercase; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; position: relative; z-index: 2; transition: transform 0.3s; }
+.hdr-badge:hover { transform: translateY(-2px); background: rgba(0,0,0,0.4); }
+.hdr-live { background: rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.4); color: #fecaca; }
+.hdr-live::before { content: ''; display: inline-block; width: 6px; height: 6px; background: #ef4444; border-radius: 50%; margin-right: 8px; box-shadow: 0 0 8px #ef4444; animation: blink 2s infinite; }
 
-/* ── Header card ────────────────────────────────────────── */
-.header-card {
-    background: linear-gradient(135deg, #0a1e30 0%, #071524 100%);
-    border: 1px solid #1a3a4a;
-    border-top: 2px solid #00c8b4;
-    border-radius: 14px;
-    padding: 20px 24px 18px;
-    margin-bottom: 6px;
-}
-.header-title {
-    font-size: 27px;
-    font-weight: 800;
-    color: #ffffff;
-    margin: 0;
-    letter-spacing: -0.3px;
-}
-.header-sub {
-    font-size: 12px;
-    color: #5a8fa0;
-    margin: 5px 0 0;
-    font-family: 'JetBrains Mono', monospace;
-    line-height: 1.6;
-}
-.teal  { color: #00c8b4; }
-.red   { color: #f87171; }
-.amber { color: #fbbf24; }
-.green { color: #34d399; }
+/* Cards & Layout */
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-top: 4px solid var(--teal); border-radius: var(--radius); padding: 22px 18px; text-align: center; box-shadow: var(--shadow-sm); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); animation: fadeUp .5s ease-out both; position: relative; overflow: hidden; }
+.stat-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-lg); border-color: var(--teal); }
+.stat-card::after { content:''; position:absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, transparent 100%); pointer-events:none; }
+.stat-num { font-size: 26px; font-weight: 700; color: var(--text); margin: 0; font-family: 'Space Grotesk', sans-serif; background: linear-gradient(135deg, var(--teal), #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.stat-lbl { font-size: 11px; color: var(--text3); margin: 6px 0 0; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 600; }
 
-/* ── Stat cards ─────────────────────────────────────────── */
-.stat-card {
-    background: #0a1e30;
-    border: 1px solid #1a3a4a;
-    border-bottom: 2px solid #00c8b4;
-    border-radius: 10px;
-    padding: 14px 16px;
-    text-align: center;
-}
-.stat-num {
-    font-size: 22px;
-    font-weight: 800;
-    color: #00c8b4;
-    margin: 0;
-    font-family: 'JetBrains Mono', monospace;
-    animation: glowTeal 3s infinite;
-}
-.stat-lbl {
-    font-size: 10px;
-    color: #4a7080;
-    margin: 4px 0 0;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-}
+/* Risk Card Focus */
+.risk-card { border-radius: var(--radius); padding: 36px 24px; text-align: center; border: 2px solid; box-shadow: var(--shadow-md); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); animation: fadeScale .5s ease-out; position: relative; overflow: hidden; }
+.risk-card:hover { transform: translateY(-6px); box-shadow: var(--shadow-lg); }
+.risk-pct { font-size: 88px; font-weight: 700; margin: 0; line-height: 1; letter-spacing: -4px; font-family: 'Space Grotesk', sans-serif; position: relative; z-index: 2; text-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+.risk-level { font-size: 14px; font-weight: 700; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 4px; position: relative; z-index: 2; }
+.risk-msg { font-size: 14px; margin: 4px 0 0; line-height: 1.6; font-weight: 500; position: relative; z-index: 2; opacity: 0.9; }
 
-/* ── Risk cards ─────────────────────────────────────────── */
-.risk-card {
-    border-radius: 16px;
-    padding: 26px 20px;
-    text-align: center;
-    border: 2px solid;
-    animation: fadeIn 0.45s ease-out;
-}
-.risk-pct {
-    font-size: 70px;
-    font-weight: 900;
-    margin: 0;
-    line-height: 1;
-    letter-spacing: -3px;
-    font-family: 'JetBrains Mono', monospace;
-}
-.risk-level {
-    font-size: 13px;
-    font-weight: 700;
-    margin: 10px 0 6px;
-    text-transform: uppercase;
-    letter-spacing: 3px;
-}
-.risk-msg {
-    font-size: 12px;
-    margin: 6px 0 0;
-    line-height: 1.55;
-}
+.risk-high { background: linear-gradient(135deg, var(--red-lt), var(--surface)); border-color: var(--red); color: #7f1d1d; animation: pulseRed 2.5s infinite, fadeScale .5s ease-out; }
+@media(prefers-color-scheme: dark) { .risk-high { background: linear-gradient(135deg, rgba(239,68,68,0.15), var(--surface)); color: #fca5a5; } }
+.risk-high .risk-pct { color: var(--red); }
+.risk-high::before { content:''; position:absolute; top:-50%; left:-50%; width:200%; height:200%; background: radial-gradient(circle, var(--red-glow) 0%, transparent 50%); opacity:0.5; pointer-events:none; z-index:1; }
 
-/* Risk card colour variants */
-.risk-high {
-    background: linear-gradient(160deg, #1e0505 0%, #120202 100%);
-    border-color: #dc2626;
-    color: #fca5a5;
-    animation: pulseRedGlow 2s infinite, fadeIn 0.45s ease-out;
-}
-.risk-mod {
-    background: linear-gradient(160deg, #1e1005 0%, #120a02 100%);
-    border-color: #d97706;
-    color: #fde68a;
-    animation: pulseAmberGlow 2.2s infinite, fadeIn 0.45s ease-out;
-}
-.risk-low {
-    background: linear-gradient(160deg, #03180c 0%, #020e08 100%);
-    border-color: #059669;
-    color: #6ee7b7;
-    animation: pulseGreenGlow 2.5s infinite, fadeIn 0.45s ease-out;
-}
+.risk-mod { background: linear-gradient(135deg, var(--amber-lt), var(--surface)); border-color: var(--amber); color: #78350f; animation: pulseAmber 2.8s infinite, fadeScale .5s ease-out; }
+@media(prefers-color-scheme: dark) { .risk-mod { background: linear-gradient(135deg, rgba(245,158,11,0.15), var(--surface)); color: #fcd34d; } }
+.risk-mod .risk-pct { color: var(--amber); }
+.risk-mod::before { content:''; position:absolute; top:-50%; left:-50%; width:200%; height:200%; background: radial-gradient(circle, var(--amber-glow) 0%, transparent 50%); opacity:0.4; pointer-events:none; z-index:1; }
 
-/* ── Progress bar ───────────────────────────────────────── */
-.prog-track {
-    background: #0a1e30;
-    border: 1px solid #1a3a4a;
-    border-radius: 6px;
-    height: 10px;
-    overflow: hidden;
-    margin: 12px 0 4px;
-}
-.prog-fill {
-    height: 10px;
-    border-radius: 6px;
-    position: relative;
-    overflow: hidden;
-}
-.prog-fill::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 0;
-    width: 60%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
-    animation: shimmer 2s linear infinite;
-}
-.prog-labels {
-    display: flex;
-    justify-content: space-between;
-    font-size: 9.5px;
-    color: #2a4a5a;
-    font-family: 'JetBrains Mono', monospace;
-}
+.risk-low { background: linear-gradient(135deg, var(--green-lt), var(--surface)); border-color: var(--green); color: #064e3b; box-shadow: var(--shadow-sm); }
+@media(prefers-color-scheme: dark) { .risk-low { background: linear-gradient(135deg, rgba(16,185,129,0.15), var(--surface)); color: #6ee7b7; } }
+.risk-low .risk-pct { color: var(--green); }
 
-/* ── Section headers ────────────────────────────────────── */
-.s-hdr {
-    font-size: 10px;
-    font-weight: 700;
-    color: #00c8b4;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    margin: 0 0 10px;
-    padding-bottom: 7px;
-    border-bottom: 1px solid #0e2a3a;
-    font-family: 'JetBrains Mono', monospace;
-}
+/* Progress Track Enhanced */
+.prog-track { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; height: 14px; overflow: hidden; margin: 18px 0 8px; box-shadow: inset 0 2px 4px rgba(0,0,0,.04); position: relative; }
+.prog-fill { height: 100%; border-radius: 12px; position: relative; overflow: hidden; transition: width 1.2s cubic-bezier(.4,0,.2,1); }
+.prog-fill::after { content: ''; position: absolute; top: 0; left: 0; width: 60%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent); animation: shimmer 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+.prog-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: 'JetBrains Mono', monospace; font-weight: 600; padding: 0 2px; }
 
-/* ── Score boxes ─────────────────────────────────────────── */
-.score-box {
-    border-radius: 10px;
-    padding: 14px 12px;
-    text-align: center;
-    border: 1px solid;
-}
-.score-num {
-    font-size: 24px;
-    font-weight: 800;
-    margin: 0;
-    font-family: 'JetBrains Mono', monospace;
-}
-.score-lbl {
-    font-size: 9.5px;
-    margin: 4px 0 0;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    opacity: 0.75;
-}
+/* Subheaders */
+.s-hdr { font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 700; color: var(--teal); text-transform: uppercase; letter-spacing: 2.5px; margin: 0 0 20px; padding-bottom: 12px; border-bottom: 2px solid var(--border); position: relative; }
+.s-hdr::after { content: ''; position: absolute; left: 0; bottom: -2px; width: 60px; height: 2px; background: var(--teal); border-radius: 2px; }
 
-/* ── Vital chips — FIXED CONTRAST ──────────────────────── */
-.vital-chip {
-    border-radius: 9px;
-    padding: 10px 8px;
-    text-align: center;
-    border: 1px solid;
-    animation: fadeIn 0.4s ease-out both;
-    transition: transform 0.15s ease;
-}
-.vital-chip:hover { transform: translateY(-2px); }
+/* Score Boxes */
+.score-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px 18px; text-align: center; box-shadow: var(--shadow-sm); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; animation: fadeUp .6s ease-out both; }
+.score-box:hover { transform: translateY(-6px) scale(1.02); box-shadow: var(--shadow-lg); border-color: transparent; }
+.score-box::before { content:''; position:absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, transparent 100%); pointer-events:none; }
+.score-num { font-size: 38px; font-weight: 800; margin: 0; font-family: 'Space Grotesk', sans-serif; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.score-lbl { font-size: 12px; font-weight: 700; margin: 12px 0 0; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text3); }
 
-/* Normal: dark green tint, white text */
-.vc-normal {
-    background: #051a0e;
-    border-color: #1a5a3a;
-}
-/* Abnormal: dark amber tint */
-.vc-warn {
-    background: #1a1000;
-    border-color: #7a4800;
-}
-/* Critical: dark red tint */
-.vc-critical {
-    background: #1e0404;
-    border-color: #8a1a1a;
-}
+/* Premium Vital Chips (Glassmorphism) */
+.vital-chip { border-radius: var(--radius); padding: 18px 14px; text-align: center; border: 1px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); animation: fadeUp .4s ease-out both; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: var(--shadow-sm); cursor: default; }
+@media (prefers-color-scheme: dark) { .vital-chip { background: rgba(30,41,59,0.5); border: 1px solid rgba(255,255,255,0.05); } }
+.vital-chip:hover { transform: translateY(-4px) scale(1.02); box-shadow: var(--shadow-lg); background: var(--surface); border-color: var(--teal); z-index: 10; }
+.vc-normal { border-left: 4px solid var(--green); }
+.vc-warn { border-left: 4px solid var(--amber); }
+.vc-critical { border-left: 4px solid var(--red); }
 
-.vital-name {
-    font-size: 9px;
-    color: #6a9aaa;          /* FIXED: was too dark */
-    margin: 0;
-    text-transform: uppercase;
-    letter-spacing: 0.7px;
-    font-family: 'JetBrains Mono', monospace;
-}
-.vital-val {
-    font-size: 17px;
-    font-weight: 700;
-    margin: 4px 0 1px;
-    font-family: 'JetBrains Mono', monospace;
-}
-.vital-unit {
-    font-size: 9px;
-    color: #4a7080;
-}
-.vital-range {
-    font-size: 8px;
-    color: #3a5a6a;          /* FIXED: visible range text */
-    margin: 2px 0 0;
-    font-family: 'JetBrains Mono', monospace;
-}
+.vital-name { font-size: 10.5px; font-weight: 700; color: var(--text3); margin: 0; text-transform: uppercase; letter-spacing: 1px; font-family: 'Inter', sans-serif; }
+.vital-val { font-size: 22px; font-weight: 700; margin: 6px 0 2px; font-family: 'Space Grotesk', sans-serif; color: var(--text); }
+.vital-unit { font-size: 11px; color: var(--text2); font-weight: 500; }
+.vital-range { font-size: 10px; color: var(--text3); margin: 6px 0 0; font-family: 'JetBrains Mono', monospace; opacity: 0.8; background: var(--surface2); padding: 4px 8px; border-radius: 6px; display: inline-block; }
 
-/* ── SIRS criteria ──────────────────────────────────────── */
-.sirs-wrap {
-    background: #07111f;
-    border: 1px solid #0e2a3a;
-    border-radius: 10px;
-    padding: 12px 14px;
-}
-.sirs-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 5px 0;
-    border-bottom: 1px solid #0a1e2a;
-    font-size: 12px;
-}
+/* Miscellaneous Components */
+.sirs-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow-sm); transition: box-shadow 0.3s; }
+.sirs-wrap:hover { box-shadow: var(--shadow-md); }
+.sirs-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; font-weight: 500; color: var(--text); transition: background 0.2s; border-radius: 8px; }
+.sirs-row:hover { background: var(--surface2); padding-left: 8px; padding-right: 8px; margin: 0 -8px; }
 .sirs-row:last-child { border-bottom: none; }
-.sirs-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
+.sirs-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
+
+/* Recommendation Cards */
+.rec-card { background: var(--surface); border-left: 4px solid; border-radius: var(--radius-sm); padding: 16px 20px; margin: 10px 0; font-size: 14px; line-height: 1.6; animation: fadeUp .4s ease-out both; box-shadow: var(--shadow-sm); transition: all 0.3s; position: relative; overflow: hidden; }
+.rec-card:hover { transform: translateX(6px); box-shadow: var(--shadow-md); }
+.rec-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px; font-family: 'Inter', sans-serif; }
+.rc-high { border-color: var(--red); color: #7f1d1d; background: linear-gradient(90deg, var(--red-lt), var(--surface)); }
+.rc-mod { border-color: var(--amber); color: #78350f; background: linear-gradient(90deg, var(--amber-lt), var(--surface)); }
+.rc-low { border-color: var(--green); color: #064e3b; background: linear-gradient(90deg, var(--green-lt), var(--surface)); }
+.rc-info { border-color: var(--teal); color: #164e63; background: linear-gradient(90deg, var(--blue-lt), var(--surface)); }
+@media (prefers-color-scheme: dark) {
+  .rc-high{background: linear-gradient(90deg, rgba(220,38,38,0.15), var(--surface)); color: #fca5a5; }
+  .rc-mod{background: linear-gradient(90deg, rgba(217,119,6,0.15), var(--surface)); color: #fcd34d; }
+  .rc-low{background: linear-gradient(90deg, rgba(5,150,105,0.15), var(--surface)); color: #6ee7b7; }
+  .rc-info{background: linear-gradient(90deg, rgba(8,145,178,0.15), var(--surface)); color: #67e8f9; }
 }
 
-/* ── Alert strips ───────────────────────────────────────── */
-.alert-strip {
-    border-radius: 8px;
-    padding: 9px 14px;
-    font-size: 11.5px;
-    font-weight: 700;
-    text-align: center;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin: 5px 0;
-    font-family: 'JetBrains Mono', monospace;
-}
-.a-high { background: #2a0404; border: 1px solid #7a1a1a; color: #fca5a5; }
-.a-mod  { background: #2a1500; border: 1px solid #7a4800; color: #fde68a; }
-.a-low  { background: #01180a; border: 1px solid #1a6a3a; color: #6ee7b7; }
-.a-info { background: #001a28; border: 1px solid #1a5a7a; color: #7dd3fc; }
+/* Sidebar Advanced Styling */
+.sidebar-header { text-align: center; padding: 24px 0; background: linear-gradient(180deg, var(--teal-lt) 0%, transparent 100%); border-radius: var(--radius); margin-bottom: 20px; border: 1px solid rgba(14,165,233,0.1); box-shadow: inset 0 2px 10px rgba(255,255,255,0.5); }
+@media (prefers-color-scheme: dark) { .sidebar-header { box-shadow: inset 0 2px 10px rgba(255,255,255,0.02); } }
+.sidebar-icon { font-size: 48px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15)); animation: float 6s ease-in-out infinite; }
+.sidebar-title { font-size: 16px; font-weight: 800; color: var(--text); margin-top: 12px; letter-spacing: 0.5px; font-family: 'Space Grotesk', sans-serif; }
+.sidebar-sub { font-size: 10px; color: var(--teal); margin-top: 4px; font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.8; }
 
-/* ── Recommendation cards ───────────────────────────────── */
-.rec-card {
-    background: #07111f;
-    border-left: 3px solid;
-    border-radius: 0 9px 9px 0;
-    padding: 10px 13px;
-    margin: 5px 0;
-    font-size: 12px;
-    line-height: 1.6;
-    animation: fadeIn 0.4s ease-out both;
-}
-.rec-title {
-    font-size: 9.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 3px;
-    font-family: 'JetBrains Mono', monospace;
-}
-.rc-high { border-color: #dc2626; color: #fca5a5; }
-.rc-mod  { border-color: #d97706; color: #fde68a; }
-.rc-low  { border-color: #059669; color: #6ee7b7; }
-.rc-info { border-color: #0891b2; color: #7dd3fc; }
+/* Organ Risk Cards */
+.organ-risk-card { background: var(--surface); border: 2px solid; border-radius: var(--radius); padding: 28px 24px; text-align: center; margin-top: 10px; box-shadow: var(--shadow-sm); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; animation: fadeScale .5s ease-out; }
+.organ-risk-card:hover { transform: translateY(-6px) scale(1.02); box-shadow: var(--shadow-lg); }
+.organ-risk-title { font-size: 13px; font-weight: 800; color: var(--text2); text-transform: uppercase; letter-spacing: 2px; }
+.organ-risk-value { font-size: 56px; font-weight: 900; font-family: 'Space Grotesk', sans-serif; margin: 8px 0; text-shadow: 0 4px 12px rgba(0,0,0,0.1); line-height: 1; }
+.organ-risk-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 6px 16px; border-radius: 24px; text-transform: uppercase; letter-spacing: 1.5px; border: 1px solid; box-shadow: inset 0 1px 3px rgba(255,255,255,0.2); }
 
-/* ── Quick scores box ───────────────────────────────────── */
-.scores-box {
-    background: #07111f;
-    border: 1px solid #0e2a3a;
-    border-radius: 10px;
-    padding: 13px 15px;
-}
-.score-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 6px 0;
-    border-bottom: 1px solid #0a1e2a;
-    font-size: 12px;
-}
-.score-row:last-child { border-bottom: none; }
-.score-label { color: #5a8090; }
-.score-value {
-    font-family: 'JetBrains Mono', monospace;
-    font-weight: 700;
-    font-size: 13px;
-}
+/* Biomarker Rows */
+.biomarker-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-left: 4px solid; background: var(--surface2); border-radius: 0 10px 10px 0; margin: 8px 0; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 1px 2px rgba(0,0,0,0.02); border-top: 1px solid transparent; border-right: 1px solid transparent; border-bottom: 1px solid transparent; }
+.biomarker-row:hover { background: var(--surface); transform: translateX(6px); box-shadow: var(--shadow-md); border-color: var(--border); }
+.biomarker-label { font-size: 13px; font-weight: 700; color: var(--text); }
+.biomarker-val { font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 14px; }
 
-/* ── Info box ───────────────────────────────────────────── */
-.i-box {
-    background: #07111f;
-    border: 1px solid #0e2a3a;
-    border-radius: 9px;
-    padding: 13px 15px;
-    font-size: 12px;
-    color: #7ab8c8;
-    line-height: 1.65;
-}
+/* Alert Strips */
+.alert-strip { border-radius: var(--radius-sm); padding: 14px 20px; font-size: 13px; font-weight: 700; text-align: center; text-transform: uppercase; letter-spacing: 1.5px; margin: 12px 0; font-family: 'Inter', sans-serif; border: 1px solid; box-shadow: var(--shadow-sm); }
+.a-high { background: var(--red-lt); border-color: rgba(239,68,68,0.3); color: #7f1d1d; }
+.a-mod { background: var(--amber-lt); border-color: rgba(245,158,11,0.3); color: #78350f; }
+.a-low { background: var(--green-lt); border-color: rgba(16,185,129,0.3); color: #064e3b; }
+.a-info { background: var(--blue-lt); border-color: rgba(59,130,246,0.3); color: #1e3a8a; }
 
-/* ── Live badge ─────────────────────────────────────────── */
-.badge {
-    display: inline-block;
-    background: rgba(0,200,180,0.1);
-    border: 1px solid rgba(0,200,180,0.3);
-    color: #00c8b4;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 3px 9px;
-    border-radius: 20px;
-    letter-spacing: 0.8px;
-    margin-right: 4px;
-    text-transform: uppercase;
-    font-family: 'JetBrains Mono', monospace;
-}
-.badge-red {
-    background: rgba(220,38,38,0.12);
-    border-color: rgba(220,38,38,0.35);
-    color: #f87171;
-    animation: blink 2s infinite;
-}
-.time-badge {
-    background: rgba(0,200,180,0.07);
-    border: 1px solid rgba(0,200,180,0.18);
-    border-radius: 7px;
-    padding: 5px 11px;
-    font-size: 11px;
-    color: #00c8b4;
-    font-family: 'JetBrains Mono', monospace;
-    display: inline-block;
-}
+/* Info Boxes & Steps */
+.i-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; font-size: 14px; color: var(--text2); line-height: 1.7; box-shadow: var(--shadow-sm); transition: box-shadow 0.3s; }
+.i-box:hover { box-shadow: var(--shadow-md); }
+.scores-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow-sm); transition: box-shadow 0.3s; }
+.scores-box:hover { box-shadow: var(--shadow-md); }
+.score-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--border); font-size: 14px; } .score-row:last-child { border-bottom: none; }
+.score-label { color: var(--text2); font-weight: 500; } .score-value { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; color: var(--text); background: var(--surface2); padding: 2px 8px; border-radius: 6px; }
 
-/* ── Step cards (default view) ──────────────────────────── */
-.step-card {
-    background: #0a1e30;
-    border: 1px solid #1a3a4a;
-    border-radius: 12px;
-    padding: 20px 16px;
-    text-align: center;
-    transition: border-color 0.25s;
-}
-.step-card:hover { border-color: #2a6a7a; }
-.step-n { font-size: 30px; font-weight: 900; color: #00c8b4; margin: 0; font-family: 'JetBrains Mono', monospace; }
-.step-t { font-size: 13px; font-weight: 700; color: #d0e8f0; margin: 6px 0 5px; }
-.step-d { font-size: 11px; color: #4a7080; line-height: 1.55; }
+.step-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 24px; text-align: center; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: var(--shadow-sm); }
+.step-card:hover { border-color: var(--teal); box-shadow: var(--shadow-lg); transform: translateY(-5px); }
+.step-n { font-size: 42px; font-weight: 700; color: var(--teal); margin: 0; font-family: 'Space Grotesk', sans-serif; background: linear-gradient(135deg, var(--teal), var(--blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.step-t { font-size: 15px; font-weight: 700; color: var(--text); margin: 12px 0 8px; font-family: 'Inter', sans-serif; }
+.step-d { font-size: 13px; color: var(--text2); line-height: 1.6; }
 
-/* ── Summary alert bar ──────────────────────────────────── */
-.summary-bar {
-    border-radius: 10px;
-    padding: 14px 18px;
-    font-size: 13px;
-    font-weight: 700;
-    text-align: center;
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
-    font-family: 'JetBrains Mono', monospace;
-    margin-top: 10px;
-    animation: fadeIn 0.5s ease-out;
-}
+.summary-bar { border-radius: var(--radius-sm); padding: 22px 28px; font-size: 15px; font-weight: 600; text-align: center; letter-spacing: 0.5px; font-family: 'Inter', sans-serif; margin-top: 20px; animation: fadeUp .6s ease-out; border: 1px solid; box-shadow: var(--shadow-md); }
 
-/* ── Footer ─────────────────────────────────────────────── */
-.footer {
-    text-align: center;
-    font-size: 10px;
-    color: #1a3a4a;
-    margin-top: 24px;
-    padding-top: 12px;
-    border-top: 1px solid #0a1e2a;
-    font-family: 'JetBrains Mono', monospace;
-}
+/* Tab Overrides (Sleek Segmented Control Look) */
+.stTabs [data-baseweb="tab-list"] { background: var(--surface2); border-radius: 12px; padding: 6px; border: 1px solid var(--border); gap: 8px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
+.stTabs [data-baseweb="tab"] { border-radius: 8px; font-weight: 600; font-size: 14px; color: var(--text2); padding: 12px 20px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid transparent; }
+.stTabs [data-baseweb="tab"]:hover { color: var(--text); background: rgba(255,255,255,0.5); }
+@media (prefers-color-scheme: dark) { .stTabs [data-baseweb="tab"]:hover { background: rgba(255,255,255,0.05); } }
+.stTabs [aria-selected="true"] { background: var(--surface) !important; color: var(--teal) !important; box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
 
-/* Streamlit dataframe dark theming */
-[data-testid="stDataFrame"] { border-radius: 10px; overflow: hidden; }
+/* DataFrames */
+[data-testid="stDataFrame"] { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-sm); transition: box-shadow 0.3s; }
+[data-testid="stDataFrame"]:hover { box-shadow: var(--shadow-md); }
+
+.footer { text-align: center; font-size: 12px; color: var(--text3); margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; line-height: 1.6; opacity: 0.8; transition: opacity 0.3s; }
+.footer:hover { opacity: 1; }
 </style>
+
 """, unsafe_allow_html=True)
 
+# ═══ MODEL LOADING ═══
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+_MODEL_DIR = os.path.join(_APP_DIR, '..', 'models')
 
-# ══════════════════════════════════════════════════════════════════════════════
-# MODEL LOADING
-# ══════════════════════════════════════════════════════════════════════════════
 @st.cache_resource
 def load_models():
-    model     = joblib.load('models/xgboost_model.pkl')
-    scaler    = joblib.load('models/scaler.pkl')
-    features  = json.load(open('models/feature_list.json'))
-    explainer = shap.TreeExplainer(model)
-    return model, scaler, features, explainer
-
+    m=joblib.load(os.path.join(_MODEL_DIR,'xgboost_model.pkl'))
+    s=joblib.load(os.path.join(_MODEL_DIR,'scaler.pkl'))
+    f=json.load(open(os.path.join(_MODEL_DIR,'feature_list.json')))
+    e=shap.TreeExplainer(m)
+    return m,s,f,e
 try:
-    model, scaler, features, explainer = load_models()
+    model,scaler,features,explainer=load_models()
 except Exception as e:
-    st.error(f"❌ Model load failed: {e}")
-    st.info("Ensure models/xgboost_model.pkl, models/scaler.pkl, and models/feature_list.json exist.")
-    st.stop()
+    st.error(f"Model load failed: {e}"); st.stop()
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# CLINICAL DATA
-# ══════════════════════════════════════════════════════════════════════════════
-# (min_normal, max_normal, hard_min, hard_max, unit)
-CLINICAL_RANGES = {
-    'HR':              (60,   100,  20,   220,  'bpm'),
-    'O2Sat':           (95,   100,  50,   100,  '%'),
-    'Temp':            (36.1, 37.2, 32.0, 42.0, '°C'),
-    'SBP':             (90,   130,  40,   250,  'mmHg'),
-    'MAP':             (70,   105,  20,   180,  'mmHg'),
-    'DBP':             (60,   85,   20,   150,  'mmHg'),
-    'Resp':            (12,   20,   4,    60,   '/min'),
-    'WBC':             (4.5,  11.0, 0.5,  100.0,'K/µL'),
-    'Creatinine':      (0.7,  1.2,  0.1,  20.0, 'mg/dL'),
-    'Bilirubin_total': (0.2,  1.2,  0.1,  30.0, 'mg/dL'),
-    'Lactate':         (0.5,  2.0,  0.1,  25.0, 'mmol/L'),
-    'Glucose':         (70,   100,  10,   800,  'mg/dL'),
-    'Hgb':             (12,   17.5, 3.0,  25.0, 'g/dL'),
-    'pH':              (7.35, 7.45, 6.80, 7.80, ''),
-    'Age':             (18,   90,   18,   110,  'yrs'),
-    'HospAdmTime':     (-200, 0,   -600,  0,    'hr'),
-    'ICULOS':          (0,    10,   0,    90,   'days'),
+# ═══ CLINICAL DATA ═══
+CLINICAL_RANGES={
+    'HR':(60,100,20,220,'bpm'),'O2Sat':(95,100,50,100,'%'),'Temp':(36.1,37.2,32,42,'°C'),
+    'SBP':(90,130,40,250,'mmHg'),'MAP':(70,105,20,180,'mmHg'),'DBP':(60,85,20,150,'mmHg'),
+    'Resp':(12,20,4,60,'/min'),'WBC':(4.5,11,0.5,100,'K/µL'),'Creatinine':(0.7,1.2,0.1,20,'mg/dL'),
+    'Bilirubin_total':(0.2,1.2,0.1,30,'mg/dL'),'Lactate':(0.5,2,0.1,25,'mmol/L'),
+    'Glucose':(70,100,10,800,'mg/dL'),'Hgb':(12,17.5,3,25,'g/dL'),'pH':(7.35,7.45,6.8,7.8,''),
+    'Age':(18,90,18,110,'yrs'),'HospAdmTime':(-200,0,-600,0,'hr'),'ICULOS':(0,10,0,90,'days'),
 }
-
-FEATURE_LABELS = {
-    'HR':              'Heart Rate',
-    'O2Sat':           'O₂ Saturation',
-    'Temp':            'Temperature',
-    'SBP':             'Systolic BP',
-    'MAP':             'Mean Art. Pr.',
-    'DBP':             'Diastolic BP',
-    'Resp':            'Resp. Rate',
-    'WBC':             'WBC Count',
-    'Creatinine':      'Creatinine',
-    'Bilirubin_total': 'Bilirubin',
-    'Lactate':         'Lactate',
-    'Glucose':         'Glucose',
-    'Hgb':             'Hemoglobin',
-    'pH':              'Blood pH',
-    'Age':             'Patient Age',
-    'HospAdmTime':     'Adm. Offset',
-    'ICULOS':          'ICU LOS',
+FEATURE_LABELS={'HR':'Heart Rate','O2Sat':'O₂ Saturation','Temp':'Temperature','SBP':'Systolic BP',
+    'MAP':'Mean Art. Pr.','DBP':'Diastolic BP','Resp':'Resp. Rate','WBC':'WBC Count',
+    'Creatinine':'Creatinine','Bilirubin_total':'Bilirubin','Lactate':'Lactate','Glucose':'Glucose',
+    'Hgb':'Hemoglobin','pH':'Blood pH','Age':'Patient Age','HospAdmTime':'Adm. Offset','ICULOS':'ICU LOS'}
+DEFAULTS={'HR':85,'O2Sat':97,'Temp':37,'SBP':120,'MAP':85,'DBP':70,'Resp':18,'WBC':8,
+    'Creatinine':1,'Bilirubin_total':0.8,'Lactate':1.5,'Glucose':110,'Hgb':13,'pH':7.4,
+    'Age':55,'HospAdmTime':-24,'ICULOS':2}
+PRESETS={
+    "🟢 Normal Patient":{'HR':78,'O2Sat':98,'Temp':36.8,'SBP':118,'MAP':82,'DBP':68,'Resp':15,
+        'WBC':7.2,'Creatinine':0.9,'Bilirubin_total':0.7,'Lactate':1.1,'Glucose':95,'Hgb':13.5,
+        'pH':7.41,'Age':45,'HospAdmTime':-24,'ICULOS':1},
+    "🟡 Moderate Risk":{'HR':105,'O2Sat':92,'Temp':38.4,'SBP':94,'MAP':66,'DBP':56,'Resp':26,
+        'WBC':15.8,'Creatinine':2.1,'Bilirubin_total':1.8,'Lactate':3.2,'Glucose':158,'Hgb':9.8,
+        'pH':7.31,'Age':64,'HospAdmTime':-10,'ICULOS':4},
+    "🔴 High Risk / Sepsis":{'HR':132,'O2Sat':86,'Temp':39.6,'SBP':74,'MAP':48,'DBP':38,'Resp':34,
+        'WBC':24.1,'Creatinine':3.8,'Bilirubin_total':4.2,'Lactate':6.5,'Glucose':225,'Hgb':7.8,
+        'pH':7.19,'Age':73,'HospAdmTime':-5,'ICULOS':2},
 }
+GROUPS=[("📊 Vital Signs",['HR','O2Sat','Temp','Resp']),("🩸 Blood Pressure",['SBP','DBP','MAP']),
+    ("🔬 Laboratory",['WBC','Creatinine','Bilirubin_total','Lactate','Glucose','Hgb','pH']),
+    ("👤 Patient Info",['Age','HospAdmTime','ICULOS'])]
+ORGAN_FEATURES={'Heart':['HR','SBP','MAP','DBP'],'Lungs':['O2Sat','Resp','pH'],
+    'Liver':['Bilirubin_total','WBC'],'Kidneys':['Creatinine','Glucose'],
+    'Brain':['MAP','pH','Glucose'],'Blood':['WBC','Hgb','Lactate','Temp']}
 
-DEFAULTS = {
-    'HR': 85.0, 'O2Sat': 97.0, 'Temp': 37.0, 'SBP': 120.0, 'MAP': 85.0,
-    'DBP': 70.0, 'Resp': 18.0, 'WBC': 8.0, 'Creatinine': 1.0,
-    'Bilirubin_total': 0.8, 'Lactate': 1.5, 'Glucose': 110.0,
-    'Hgb': 13.0, 'pH': 7.4, 'Age': 55.0, 'HospAdmTime': -24.0, 'ICULOS': 2.0
-}
-
-PRESETS = {
-    "🟢 Normal Patient": {
-        'HR':78,'O2Sat':98,'Temp':36.8,'SBP':118,'MAP':82,'DBP':68,'Resp':15,
-        'WBC':7.2,'Creatinine':0.9,'Bilirubin_total':0.7,'Lactate':1.1,
-        'Glucose':95,'Hgb':13.5,'pH':7.41,'Age':45,'HospAdmTime':-24,'ICULOS':1
-    },
-    "🟡 Moderate Risk": {
-        'HR':105,'O2Sat':92,'Temp':38.4,'SBP':94,'MAP':66,'DBP':56,'Resp':26,
-        'WBC':15.8,'Creatinine':2.1,'Bilirubin_total':1.8,'Lactate':3.2,
-        'Glucose':158,'Hgb':9.8,'pH':7.31,'Age':64,'HospAdmTime':-10,'ICULOS':4
-    },
-    "🔴 High Risk / Sepsis": {
-        'HR':132,'O2Sat':86,'Temp':39.6,'SBP':74,'MAP':48,'DBP':38,'Resp':34,
-        'WBC':24.1,'Creatinine':3.8,'Bilirubin_total':4.2,'Lactate':6.5,
-        'Glucose':225,'Hgb':7.8,'pH':7.19,'Age':73,'HospAdmTime':-5,'ICULOS':2
-    },
-}
-
-GROUPS = [
-    ("📊 Vital Signs",      ['HR','O2Sat','Temp','Resp']),
-    ("🩸 Blood Pressure",   ['SBP','DBP','MAP']),
-    ("🔬 Laboratory",       ['WBC','Creatinine','Bilirubin_total','Lactate','Glucose','Hgb','pH']),
-    ("👤 Patient Info",     ['Age','HospAdmTime','ICULOS']),
-]
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# CLINICAL HELPER FUNCTIONS
-# ══════════════════════════════════════════════════════════════════════════════
-def vital_status(feat, val):
-    """Return 'normal', 'abnormal', or 'critical'."""
-    if feat not in CLINICAL_RANGES:
-        return 'normal'
-    mn, mx, _, _, _ = CLINICAL_RANGES[feat]
-    if feat == 'O2Sat':
-        if val < 88: return 'critical'
-        if val < 95: return 'abnormal'
-        return 'normal'
-    if feat == 'pH':
-        if val < 7.20 or val > 7.55: return 'critical'
-        if val < 7.35 or val > 7.45: return 'abnormal'
-        return 'normal'
-    if feat == 'Lactate':
-        if val > 4.0: return 'critical'
-        if val > 2.0: return 'abnormal'
-        return 'normal'
-    if feat == 'MAP':
-        if val < 50: return 'critical'
-        if val < 70: return 'abnormal'
-        return 'normal'
-    # General rule
-    span = mx - mn
-    if val < mn - span * 0.5 or val > mx + span * 0.5:
-        return 'critical'
-    if val < mn or val > mx:
-        return 'abnormal'
+# ═══ HELPERS ═══
+def vital_status(feat,val):
+    if feat not in CLINICAL_RANGES: return 'normal'
+    mn,mx,_,_,_=CLINICAL_RANGES[feat]
+    if feat=='O2Sat': return 'critical' if val<88 else 'abnormal' if val<95 else 'normal'
+    if feat=='pH': return 'critical' if val<7.20 or val>7.55 else 'abnormal' if val<7.35 or val>7.45 else 'normal'
+    if feat=='Lactate': return 'critical' if val>4 else 'abnormal' if val>2 else 'normal'
+    if feat=='MAP': return 'critical' if val<50 else 'abnormal' if val<70 else 'normal'
+    span=mx-mn
+    if val<mn-span*0.5 or val>mx+span*0.5: return 'critical'
+    if val<mn or val>mx: return 'abnormal'
     return 'normal'
 
-
-def vital_color(status):
-    return {'normal': '#4ade80', 'abnormal': '#fbbf24', 'critical': '#f87171'}[status]
-
-
-def vital_chip_class(status):
-    return {'normal': 'vc-normal', 'abnormal': 'vc-warn', 'critical': 'vc-critical'}[status]
-
+def vital_color(s): return {'normal':'#059669','abnormal':'#d97706','critical':'#dc2626'}[s]
+def vital_chip_class(s): return {'normal':'vc-normal','abnormal':'vc-warn','critical':'vc-critical'}[s]
 
 def compute_sirs(inp):
-    return {
-        'Temp >38.3°C or <36°C': inp.get('Temp',37) > 38.3 or inp.get('Temp',37) < 36.0,
-        'HR > 90 bpm':           inp.get('HR',80) > 90,
-        'Resp > 20 /min':        inp.get('Resp',16) > 20,
-        'WBC >12 or <4 K/µL':    inp.get('WBC',8) > 12 or inp.get('WBC',8) < 4,
-    }
-
+    return {'Temp >38.3 or <36°C':inp.get('Temp',37)>38.3 or inp.get('Temp',37)<36,
+            'HR > 90 bpm':inp.get('HR',80)>90,'Resp > 20 /min':inp.get('Resp',16)>20,
+            'WBC >12 or <4 K/µL':inp.get('WBC',8)>12 or inp.get('WBC',8)<4}
 
 def compute_sofa(inp):
-    """Simplified SOFA approximation (0–12)."""
-    s = 0
-    o2 = inp.get('O2Sat', 97)
-    if o2 < 90: s += 3
-    elif o2 < 94: s += 2
-    elif o2 < 96: s += 1
-
-    bili = inp.get('Bilirubin_total', 0.8)
-    if bili >= 6: s += 3
-    elif bili >= 2: s += 2
-    elif bili >= 1.2: s += 1
-
-    mp = inp.get('MAP', 85)
-    if mp < 50: s += 3
-    elif mp < 65: s += 2
-    elif mp < 70: s += 1
-
-    cr = inp.get('Creatinine', 1.0)
-    if cr >= 3.5: s += 3
-    elif cr >= 2.0: s += 2
-    elif cr >= 1.2: s += 1
+    s=0; o2=inp.get('O2Sat',97)
+    if o2<90: s+=3
+    elif o2<94: s+=2
+    elif o2<96: s+=1
+    b=inp.get('Bilirubin_total',0.8)
+    if b>=6: s+=3
+    elif b>=2: s+=2
+    elif b>=1.2: s+=1
+    m=inp.get('MAP',85)
+    if m<50: s+=3
+    elif m<65: s+=2
+    elif m<70: s+=1
+    c=inp.get('Creatinine',1)
+    if c>=3.5: s+=3
+    elif c>=2: s+=2
+    elif c>=1.2: s+=1
     return s
 
-
 def shock_index(inp):
-    hr  = inp.get('HR', 80)
-    sbp = inp.get('SBP', 120)
-    return round(hr / sbp, 2) if sbp > 0 else 0.0
+    hr=inp.get('HR',80);sbp=inp.get('SBP',120)
+    return round(hr/sbp,2) if sbp>0 else 0.0
 
-
-def clinical_recs(risk_pct, inp, sirs_met, sofa):
-    recs = []
-    if risk_pct >= 60:
-        recs.append(("high","⚠️ IMMEDIATE — SEP-1 PROTOCOL",
-                     "Activate Sepsis Alert. Notify attending physician NOW. Start 30 mL/kg IV crystalloid within 3 hours."))
-        recs.append(("high","🧫 CULTURES + LABS",
-                     "Blood cultures × 2 BEFORE antibiotics. STAT: CBC, BMP, LFTs, coagulation, procalcitonin."))
-        recs.append(("high","💊 ANTIBIOTICS",
-                     f"Broad-spectrum IV antibiotics within 1 hour. MAP currently {inp.get('MAP',0):.0f} mmHg — target ≥65."))
-        recs.append(("info","📊 MONITORING",
-                     "Continuous vitals, foley catheter for urine output. Target UO ≥0.5 mL/kg/hr. Reassess every 15 min."))
-    elif risk_pct >= 30:
-        recs.append(("mod","⚡ INCREASED VIGILANCE",
-                     f"SIRS criteria met: {sirs_met}/4. Reassess every 30 minutes. Watch for clinical deterioration."))
-        recs.append(("mod","🔬 DIAGNOSTIC WORKUP",
-                     "Order CBC, CMP, Lactate, Blood Cultures if febrile. Consider empiric antibiotics if source identified."))
-        recs.append(("info","💧 FLUID ASSESSMENT",
-                     "Assess volume responsiveness. IV fluid challenge 500 mL NS if hypotensive or tachycardic."))
+def clinical_recs(rp,inp,sm,sofa):
+    recs=[]
+    if rp>=60:
+        recs.append(("high","⚠️ IMMEDIATE — SEP-1 PROTOCOL","Activate Sepsis Alert. Start 30 mL/kg IV crystalloid within 3 hours. Notify attending NOW."))
+        recs.append(("high","🧫 CULTURES + LABS","Blood cultures ×2 BEFORE antibiotics. STAT: CBC, BMP, LFTs, coagulation, procalcitonin."))
+        recs.append(("high","💊 ANTIBIOTICS",f"Broad-spectrum IV within 1 hour. MAP {inp.get('MAP',0):.0f} mmHg — target ≥65."))
+        recs.append(("info","📊 MONITORING","Continuous vitals, foley catheter. Target UO ≥0.5 mL/kg/hr. Reassess q15min."))
+    elif rp>=30:
+        recs.append(("mod","⚡ INCREASED VIGILANCE",f"SIRS criteria met: {sm}/4. Reassess every 30 minutes."))
+        recs.append(("mod","🔬 DIAGNOSTIC WORKUP","Order CBC, CMP, Lactate, Blood Cultures if febrile."))
+        recs.append(("info","💧 FLUID ASSESSMENT","Assess volume responsiveness. IV fluid challenge 500 mL NS if hypotensive."))
     else:
-        recs.append(("low","✅ ROUTINE MONITORING",
-                     "Continue standard ICU monitoring. Reassess every 4 hours."))
-        if sofa >= 2:
-            recs.append(("info","📋 SOFA NOTE",
-                         f"SOFA score {sofa} — document organ function baseline. Trend daily LFTs and creatinine."))
+        recs.append(("low","✅ ROUTINE MONITORING","Continue standard ICU monitoring. Reassess every 4 hours."))
+        if sofa>=2: recs.append(("info","📋 SOFA NOTE",f"SOFA score {sofa} — document organ function baseline."))
     return recs
 
+def organ_risk_pct(organ,inp,base_risk):
+    feats=ORGAN_FEATURES.get(organ,[]);d=0
+    for f in feats:
+        if f in inp:
+            s=vital_status(f,inp[f])
+            if s=='critical': d+=2
+            elif s=='abnormal': d+=1
+    mx=len(feats)*2; bonus=(d/mx*0.25) if mx>0 else 0
+    return min(100,round((base_risk+bonus)*100,1))
 
-# ══════════════════════════════════════════════════════════════════════════════
-# MATPLOTLIB THEME HELPER
-# ══════════════════════════════════════════════════════════════════════════════
-BG  = '#040d18'
-AX  = '#07111f'
-GRID_C = (1, 1, 1, 0.05)
-TICK_C = '#4a7080'
-TEXT_C = '#c8dde8'
+def risk_color_hex(pct):
+    if pct<30: return f"#{int(5+(pct/30)*200):02x}{int(150-(pct/30)*20):02x}73"
+    elif pct<60: t=(pct-30)/30; return f"#{int(205+t*50):02x}{int(130-t*80):02x}10"
+    else: t=(pct-60)/40; return f"#{220:02x}{int(50-t*40):02x}0a"
 
-def style_ax(ax, fig):
-    fig.patch.set_facecolor(BG)
-    ax.set_facecolor(AX)
-    for spine in ax.spines.values():
-        spine.set_edgecolor((1, 1, 1, 0.07))
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.tick_params(colors=TICK_C, labelsize=8.5)
-    ax.xaxis.label.set_color('#3a6070')
-    ax.yaxis.label.set_color('#3a6070')
+BG_L='#ffffff';AX_L='#f8fafc';GRID_L=(0,0,0,0.06);TICK_L='#6a8090';TEXT_L='#1a2636'
+def style_ax(ax,fig):
+    fig.patch.set_facecolor(BG_L);ax.set_facecolor(AX_L)
+    for s in ax.spines.values(): s.set_edgecolor((0,0,0,0.1))
+    ax.spines['top'].set_visible(False);ax.spines['right'].set_visible(False)
+    ax.tick_params(colors=TICK_L,labelsize=8.5);ax.xaxis.label.set_color(TICK_L);ax.yaxis.label.set_color(TICK_L)
+
+# ═══ EXCEL EXPORT ═══
+def generate_excel(inp,risk_pct,feat_imp,sirs_dict,sofa,si,organ_data, patient_name):
+    buf=io.BytesIO()
+    with pd.ExcelWriter(buf,engine='openpyxl') as w:
+        pd.DataFrame([{'Feature':FEATURE_LABELS.get(k,k),'Value':v,
+            'Unit':CLINICAL_RANGES.get(k,('','','','',''))[4],
+            'Normal Min':CLINICAL_RANGES.get(k,(0,0,0,0,''))[0],
+            'Normal Max':CLINICAL_RANGES.get(k,(0,0,0,0,''))[1],
+            'Status':vital_status(k,v).upper()} for k,v in inp.items()
+        ]).to_excel(w,sheet_name='Patient Vitals',index=False, startrow=3)
+        pd.DataFrame([{'Metric':'Patient Name','Value':patient_name},
+            {'Metric':'Sepsis Risk %','Value':f"{risk_pct}%"},
+            {'Metric':'Risk Level','Value':'HIGH' if risk_pct>=60 else 'MODERATE' if risk_pct>=30 else 'LOW'},
+            {'Metric':'SIRS Met','Value':f"{sum(sirs_dict.values())} / 4"},
+            {'Metric':'SOFA Score','Value':sofa},{'Metric':'Shock Index','Value':si},
+            {'Metric':'Timestamp','Value':datetime.now().strftime('%Y-%m-%d %H:%M')}
+        ]).to_excel(w,sheet_name='Risk Summary',index=False, startrow=3)
+        pd.DataFrame([{'Feature':FEATURE_LABELS.get(k,k),'SHAP Value':v,
+            'Direction':'↑ Risk' if v>0 else '↓ Risk'}
+            for k,v in sorted(feat_imp.items(),key=lambda x:abs(x[1]),reverse=True)
+        ]).to_excel(w,sheet_name='SHAP Analysis',index=False, startrow=3)
+        pd.DataFrame([{'Organ':o,'Risk %':f"{d['risk']}%",'Biomarkers':', '.join(ORGAN_FEATURES.get(o,[]))}
+            for o,d in organ_data.items()]).to_excel(w,sheet_name='Organ Risk',index=False, startrow=3)
+        pd.DataFrame([{'Criterion':k,'Met':'YES' if v else 'NO'} for k,v in sirs_dict.items()
+        ]).to_excel(w,sheet_name='SIRS',index=False, startrow=3)
+        
+        # Apply professional styling to all sheets
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        workbook = w.book
+        title_font = Font(bold=True, size=16, color='0C1F3A')
+        subtitle_font = Font(italic=True, size=11, color='4A6080')
+        header_font = Font(bold=True, color='FFFFFF')
+        header_fill = PatternFill(start_color='0891B2', end_color='0891B2', fill_type='solid')
+        thin_border = Border(left=Side(style='thin', color='DDE4ED'), right=Side(style='thin', color='DDE4ED'), top=Side(style='thin', color='DDE4ED'), bottom=Side(style='thin', color='DDE4ED'))
+        
+        for sheet_name in workbook.sheetnames:
+            ws = workbook[sheet_name]
+            
+            # Branding Headers
+            ws['A1'] = f"Sepsis Early Warning System (EWS) - {sheet_name}"
+            ws['A1'].font = title_font
+            ws.merge_cells('A1:D1')
+            
+            ws['A2'] = f"Patient: {patient_name} | Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} | Auto-generated Report"
+            ws['A2'].font = subtitle_font
+            ws.merge_cells('A2:D2')
+            
+            for row in ws.iter_rows(min_row=4, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
+                for cell in row:
+                    if cell.row == 4: # Table Header
+                        cell.font = header_font
+                        cell.fill = header_fill
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                    else: # Table Body
+                        cell.alignment = Alignment(horizontal='left', vertical='center')
+                    cell.border = thin_border
+                    
+            for i in range(1, ws.max_column + 1):
+                col_letter = get_column_letter(i)
+                max_length = 0
+                for cell in ws[col_letter]:
+                    try:
+                        if cell.value is not None:
+                            cell_str = str(cell.value)
+                            if '\n' in cell_str:
+                                cell_str = max(cell_str.split('\n'), key=len)
+                            max_length = max(max_length, len(cell_str))
+                    except: pass
+                ws.column_dimensions[col_letter].width = min(60, max_length + 2)
+    buf.seek(0); return buf.read()
+
+# ═══ PDF EXPORT ═══
+def generate_pdf(inp,risk_pct,feat_imp,sirs_dict,sofa,si,organ_data, patient_name):
+    buf=io.BytesIO()
+    doc=SimpleDocTemplate(buf,pagesize=A4,topMargin=2*cm,bottomMargin=2*cm,leftMargin=2*cm,rightMargin=2*cm)
+    styles=getSampleStyleSheet(); story=[]
+    NAVY=rl_colors.HexColor('#0c1f3a');TEAL=rl_colors.HexColor('#0891b2')
+    RED=rl_colors.HexColor('#dc2626');AMBER=rl_colors.HexColor('#d97706')
+    GREEN=rl_colors.HexColor('#059669');LGRAY=rl_colors.HexColor('#f5f7fa');GRAY=rl_colors.HexColor('#dde4ed')
+    rc=RED if risk_pct>=60 else AMBER if risk_pct>=30 else GREEN
+    lt='HIGH RISK' if risk_pct>=60 else 'MODERATE RISK' if risk_pct>=30 else 'LOW RISK'
+    ts=ParagraphStyle('T',fontName='Helvetica-Bold',fontSize=22,textColor=NAVY,spaceAfter=6,alignment=TA_CENTER)
+    ss=ParagraphStyle('S',fontName='Helvetica',fontSize=10,textColor=rl_colors.HexColor('#4a6080'),alignment=TA_CENTER,spaceAfter=18)
+    hs=ParagraphStyle('H',fontName='Helvetica-Bold',fontSize=12,textColor=TEAL,spaceBefore=16,spaceAfter=6)
+    bs=ParagraphStyle('B',fontName='Helvetica',fontSize=10,textColor=rl_colors.HexColor('#1a2636'),leading=16,spaceAfter=6)
+    story.append(Paragraph("SEPSIS EARLY WARNING SYSTEM",ts))
+    story.append(Paragraph("Clinical Risk Assessment Report",ss))
+    story.append(HRFlowable(width="100%",thickness=2,color=TEAL,spaceAfter=14))
+    # Fix Patient Name Layout using Table
+    header_data = [[Paragraph(f"<b>Patient Name:</b> {patient_name}", bs),
+                    Paragraph(f"<b>Date:</b> {datetime.now().strftime('%B %d, %Y %H:%M')}", ParagraphStyle('R', parent=bs, alignment=2))]] # alignment=2 is RIGHT
+    header_table = Table(header_data, colWidths=[10*cm, 7*cm])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10)
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1,10))
+    rt=Table([['SEPSIS RISK',f'{risk_pct}%',lt],['SIRS',f"{sum(sirs_dict.values())}/4",'SOFA'],
+        ['Shock Index',f'{si}',f'{sofa}']],colWidths=[5.5*cm]*3)
+    rt.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),NAVY),('TEXTCOLOR',(0,0),(-1,0),rl_colors.white),
+        ('TEXTCOLOR',(1,0),(1,0),rc),('FONTNAME',(0,0),(-1,-1),'Helvetica-Bold'),
+        ('FONTSIZE',(0,0),(-1,0),14),('FONTSIZE',(0,1),(-1,-1),11),('ALIGN',(0,0),(-1,-1),'CENTER'),
+        ('VALIGN',(0,0),(-1,-1),'MIDDLE'),('ROWBACKGROUNDS',(0,1),(-1,-1),[LGRAY,rl_colors.white]),
+        ('GRID',(0,0),(-1,-1),.5,GRAY),('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8)]))
+    story.append(rt);story.append(Spacer(1,14))
+    story.append(Paragraph("Patient Vital Signs",hs))
+    vd=[['Feature','Value','Unit','Status']]
+    for k,v in inp.items():
+        vd.append([FEATURE_LABELS.get(k,k),f'{v:.2f}',CLINICAL_RANGES.get(k,('','','','',''))[4],vital_status(k,v).upper()])
+    vt=Table(vd,colWidths=[5*cm,3.5*cm,3*cm,4*cm])
+    vt.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),TEAL),('TEXTCOLOR',(0,0),(-1,0),rl_colors.white),
+        ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('FONTNAME',(0,1),(-1,-1),'Helvetica'),
+        ('FONTSIZE',(0,0),(-1,-1),9),('ALIGN',(1,0),(-1,-1),'CENTER'),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1),[LGRAY,rl_colors.white]),('GRID',(0,0),(-1,-1),.4,GRAY),
+        ('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5)]))
+    story.append(vt)
+    story.append(Paragraph("SHAP Top 10",hs))
+    ss2=sorted(feat_imp.items(),key=lambda x:abs(x[1]),reverse=True)[:10]
+    sd=[['Feature','SHAP','Direction']]
+    for k,v in ss2: sd.append([FEATURE_LABELS.get(k,k),f'{v:+.4f}','↑ Risk' if v>0 else '↓ Risk'])
+    st2=Table(sd,colWidths=[5.5*cm,4*cm,6*cm])
+    st2.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),TEAL),('TEXTCOLOR',(0,0),(-1,0),rl_colors.white),
+        ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('FONTNAME',(0,1),(-1,-1),'Helvetica'),
+        ('FONTSIZE',(0,0),(-1,-1),9),('ALIGN',(1,0),(-1,-1),'CENTER'),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1),[LGRAY,rl_colors.white]),('GRID',(0,0),(-1,-1),.4,GRAY),
+        ('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5)]))
+    story.append(st2)
+    story.append(Paragraph("Organ Risk",hs))
+    od2=[['Organ','Risk %','Status','Biomarkers']]
+    for o,d in organ_data.items():
+        r=d['risk'];s='CRITICAL' if r>=60 else 'ELEVATED' if r>=30 else 'NORMAL'
+        od2.append([o,f'{r}%',s,', '.join(ORGAN_FEATURES.get(o,[]))])
+    ot=Table(od2,colWidths=[3.5*cm,2.5*cm,3.5*cm,6*cm])
+    ot.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),TEAL),('TEXTCOLOR',(0,0),(-1,0),rl_colors.white),
+        ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('FONTNAME',(0,1),(-1,-1),'Helvetica'),
+        ('FONTSIZE',(0,0),(-1,-1),9),('ALIGN',(1,0),(2,-1),'CENTER'),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1),[LGRAY,rl_colors.white]),('GRID',(0,0),(-1,-1),.4,GRAY),
+        ('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5)]))
+    story.append(ot);story.append(Spacer(1,18));story.append(HRFlowable(width="100%",thickness=1,color=GRAY))
+    story.append(Paragraph("Sepsis Early Warning System · Confidential Clinical Record",
+        ParagraphStyle('f',fontName='Helvetica',fontSize=8,textColor=rl_colors.HexColor('#8aa0b8'),alignment=TA_CENTER,spaceBefore=8)))
+    doc.build(story);buf.seek(0);return buf.read()
+
+# ═══ REALISTIC ANATOMICAL BODY MAP (SVG) ═══
+def render_body_map(organ_data, selected_organ=None, height=760):
+    def risk_color(o):
+        r = organ_data[o]['risk']
+        if r >= 60: return '#ef4444' # Red
+        if r >= 30: return '#f59e0b' # Amber
+        return '#10b981' # Green
+
+    def base_color(o):
+        return {
+            'Brain': '#e0f2fe', 'Lungs': '#bae6fd', 'Heart': '#fca5a5', 
+            'Liver': '#fed7aa', 'Kidneys': '#fef3c7', 'Blood': '#fee2e2'
+        }.get(o, '#ffffff')
+
+    svg = f"""
+<svg viewBox="0 0 400 800" xmlns="http://www.w3.org/2000/svg" style="background: radial-gradient(circle at 50% 30%, #1e293b 0%, #0f172a 100%); border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);">
+  <defs>
+    <filter id="organGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#334155;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:0.8" />
+    </linearGradient>
+    <style>
+      @keyframes pulse {{ 0% {{ opacity: 0.6; transform: scale(1); }} 50% {{ opacity: 1; transform: scale(1.05); }} 100% {{ opacity: 0.6; transform: scale(1); }} }}
+      .organ {{ transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }}
+      .organ:hover {{ filter: url(#organGlow); transform: scale(1.02); }}
+      .critical {{ animation: pulse 2s infinite ease-in-out; }}
+      .label-text {{ font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700; fill: #94a3b8; letter-spacing: 1px; }}
+      .risk-text {{ font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800; }}
+    </style>
+  </defs>
+
+  <!-- Anatomical Silhouette -->
+  <path d="M200,40 C170,40 160,60 160,85 C160,105 165,120 180,125 C175,128 170,135 150,135 C120,135 90,150 75,170 C60,190 50,240 45,300 C40,360 35,420 40,460 C45,500 60,500 70,480 C75,440 85,380 90,320 C95,280 110,240 120,230 C125,270 125,340 130,400 C135,460 145,540 140,640 C135,700 130,730 150,750 C170,770 190,770 195,750 C200,730 195,700 200,600 C205,700 200,730 205,750 C210,770 230,770 250,750 C270,730 265,700 260,640 C255,540 265,460 270,400 C275,340 275,270 280,230 C290,240 305,280 310,320 C315,380 325,440 330,480 C340,500 355,500 360,460 C365,420 360,360 355,300 C350,240 340,190 325,170 C310,150 280,135 250,135 C230,135 225,128 220,125 C235,120 240,105 240,85 C240,60 230,40 200,40 Z" fill="url(#bodyGradient)" stroke="#475569" stroke-width="2"/>
+
+  <!-- Skeleton / MRI Grid (Stylized) -->
+  <g opacity="0.1" stroke="#ffffff" stroke-width="1.5" fill="none">
+    <path d="M200,130 L200,420 M180,150 Q120,150 90,200 M220,150 Q280,150 310,200" />
+    <circle cx="200" cy="85" r="25" />
+    <path d="M160,250 Q200,240 240,250 M155,280 Q200,270 245,280 M150,310 Q200,300 250,310" />
+  </g>
+
+  <!-- ORGANS -->
+  
+  <!-- Brain -->
+  <g class="organ {'critical' if organ_data['Brain']['risk'] >= 60 else ''}">
+    <path d="M180,50 C165,50 155,60 155,75 C155,90 170,95 180,95 C190,95 205,90 205,75 C205,60 195,50 180,50" fill="{base_color('Brain')}" stroke="{risk_color('Brain')}" stroke-width="3" opacity="0.9" />
+  </g>
+
+  <!-- Lungs -->
+  <g class="organ {'critical' if organ_data['Lungs']['risk'] >= 60 else ''}">
+    <path d="M145,160 C110,160 100,200 110,250 C120,300 160,300 175,280 C180,260 180,160 145,160 Z" fill="{base_color('Lungs')}" stroke="{risk_color('Lungs')}" stroke-width="3" opacity="0.8" />
+    <path d="M255,160 C290,160 300,200 290,250 C280,300 240,300 225,280 C220,260 220,160 255,160 Z" fill="{base_color('Lungs')}" stroke="{risk_color('Lungs')}" stroke-width="3" opacity="0.8" />
+  </g>
+
+  <!-- Heart -->
+  <g class="organ {'critical' if organ_data['Heart']['risk'] >= 60 else ''}">
+    <path d="M205,190 C185,190 180,210 195,235 C205,250 220,240 225,225 C230,210 225,190 205,190 Z" fill="{base_color('Heart')}" stroke="{risk_color('Heart')}" stroke-width="3" opacity="1" />
+  </g>
+
+  <!-- Liver -->
+  <g class="organ {'critical' if organ_data['Liver']['risk'] >= 60 else ''}">
+    <path d="M130,290 C140,270 200,270 220,285 C230,300 210,320 200,320 C160,320 130,320 130,290 Z" fill="{base_color('Liver')}" stroke="{risk_color('Liver')}" stroke-width="3" opacity="0.9" />
+  </g>
+
+  <!-- Kidneys -->
+  <g class="organ {'critical' if organ_data['Kidneys']['risk'] >= 60 else ''}">
+    <path d="M150,330 C135,330 130,350 145,370 C160,380 170,370 165,350 C160,340 165,330 150,330 Z" fill="{base_color('Kidneys')}" stroke="{risk_color('Kidneys')}" stroke-width="2.5" opacity="0.9" />
+    <path d="M250,330 C265,330 270,350 255,370 C240,380 230,370 235,350 C240,340 235,330 250,330 Z" fill="{base_color('Kidneys')}" stroke="{risk_color('Kidneys')}" stroke-width="2.5" opacity="0.9" />
+  </g>
+
+  <!-- Blood (Vascular Lines) -->
+  <g opacity="0.4" stroke="{risk_color('Blood')}" stroke-width="2" fill="none">
+    <path d="M200,240 L200,450 M200,450 L160,700 M200,450 L240,700" />
+    <path d="M200,160 L140,230 M200,160 L260,230" />
+  </g>
+
+  <!-- LABELS -->
+  <g class="labels">
+    <line x1="150" y1="75" x2="60" y2="75" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
+    <text x="55" y="75" text-anchor="end" class="label-text">BRAIN</text>
+    <text x="55" y="92" text-anchor="end" class="risk-text" fill="{risk_color('Brain')}">{organ_data['Brain']['risk']}%</text>
+
+    <line x1="110" y1="200" x2="60" y2="200" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
+    <text x="55" y="200" text-anchor="end" class="label-text">LUNGS</text>
+    <text x="55" y="217" text-anchor="end" class="risk-text" fill="{risk_color('Lungs')}">{organ_data['Lungs']['risk']}%</text>
+
+    <line x1="225" y1="215" x2="340" y2="215" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
+    <text x="345" y="215" text-anchor="start" class="label-text">HEART</text>
+    <text x="345" y="232" text-anchor="start" class="risk-text" fill="{risk_color('Heart')}">{organ_data['Heart']['risk']}%</text>
+
+    <line x1="220" y1="290" x2="340" y2="290" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
+    <text x="345" y="290" text-anchor="start" class="label-text">LIVER</text>
+    <text x="345" y="307" text-anchor="start" class="risk-text" fill="{risk_color('Liver')}">{organ_data['Liver']['risk']}%</text>
+
+    <line x1="140" y1="350" x2="60" y2="350" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
+    <text x="55" y="350" text-anchor="end" class="label-text">KIDNEYS</text>
+    <text x="55" y="367" text-anchor="end" class="risk-text" fill="{risk_color('Kidneys')}">{organ_data['Kidneys']['risk']}%</text>
+
+    <line x1="200" y1="450" x2="340" y2="450" stroke="#475569" stroke-width="1" stroke-dasharray="2,2" />
+    <text x="345" y="450" text-anchor="start" class="label-text">BLOOD</text>
+    <text x="345" y="467" text-anchor="start" class="risk-text" fill="{risk_color('Blood')}">{organ_data['Blood']['risk']}%</text>
+  </g>
+</svg>
+"""
+    return svg
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR
-# ══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("""
-    <div style='text-align:center;padding:14px 0 16px'>
-        <div style='font-size:38px'>🏥</div>
-        <div style='font-size:14px;font-weight:800;color:#ffffff;margin-top:7px;letter-spacing:-0.3px'>Patient Vitals Input</div>
-        <div style='font-size:10px;color:#2a5a6a;margin-top:3px;font-family:JetBrains Mono'>ICU Clinical Parameters</div>
+    st.markdown("""<div class='sidebar-header'>
+        <div class='sidebar-icon'>🏥</div>
+        <div class='sidebar-title'>PATIENT INPUT</div>
+        <div class='sidebar-sub'>ICU Clinical Parameters</div>
     </div>""", unsafe_allow_html=True)
-
-    # ── Input mode ────────────────────────────────────────────
-    input_mode = st.radio(
-        "Input method",
-        ["Manual entry", "Load preset scenario", "Upload .txt file"],
-        horizontal=False
-    )
-
-    inputs = {}
-
-    # ── PRESET MODE ───────────────────────────────────────────
-    if input_mode == "Load preset scenario":
-        preset = st.selectbox("Select scenario", list(PRESETS.keys()))
-        inputs = {k: float(v) for k, v in PRESETS[preset].items()}
-        # Ensure all features present
+    patient_name = st.text_input("Patient Name", value=st.session_state.get('patient_name', 'John Doe'))
+    st.session_state.patient_name = patient_name
+    input_mode=st.radio("Input method",["Manual entry","Load preset scenario","Upload .txt file"],horizontal=False)
+    inputs={}
+    if input_mode=="Load preset scenario":
+        preset=st.selectbox("Scenario",list(PRESETS.keys()));inputs={k:float(v) for k,v in PRESETS[preset].items()}
         for f in features:
-            if f not in inputs:
-                inputs[f] = float(DEFAULTS.get(f, 0.0))
-        st.success(f"✅ Scenario loaded — {len(inputs)} values")
-
-    # ── FILE UPLOAD MODE ──────────────────────────────────────
-    elif input_mode == "Upload .txt file":
-        st.markdown("""<div class='i-box' style='margin-bottom:10px;font-size:11px'>
-        One numeric value per line in this order:<br><br>
-        HR, O2Sat, Temp, SBP, MAP, DBP, Resp,<br>
-        WBC, Creatinine, Bilirubin_total, Lactate,<br>
-        Glucose, Hgb, pH, Age, HospAdmTime, ICULOS
-        </div>""", unsafe_allow_html=True)
-        uploaded = st.file_uploader("Upload .txt", type=["txt"])
+            if f not in inputs: inputs[f]=float(DEFAULTS.get(f,0))
+        st.success(f"✅ {len(inputs)} values loaded")
+    elif input_mode=="Upload .txt file":
+        st.markdown("<div style='font-size:11px;color:var(--text2);margin-bottom:8px'>Format: <code>FeatureName: Value</code> per line</div>",unsafe_allow_html=True)
+        uploaded=st.file_uploader("Upload .txt",type=["txt"])
         if uploaded:
-            lines = uploaded.read().decode().strip().split('\n')
-            vals  = [float(v.strip()) for v in lines if v.strip()]
-            for i, feat in enumerate(features):
-                inputs[feat] = vals[i] if i < len(vals) else float(DEFAULTS.get(feat, 0.0))
-            st.success(f"✅ Loaded {len(vals)} values")
-        else:
+            lines=uploaded.read().decode().strip().split('\n')
+            parsed=0
+            for line in lines:
+                if ':' in line or '=' in line:
+                    sep=':' if ':' in line else '='
+                    k,v=line.split(sep,1)
+                    k,v=k.strip(),v.strip()
+                    if k in features:
+                        try:
+                            inputs[k]=float(v); parsed+=1
+                        except: pass
             for f in features:
-                inputs[f] = float(DEFAULTS.get(f, 0.0))
-
-    # ── MANUAL ENTRY MODE ─────────────────────────────────────
+                if f not in inputs: inputs[f]=float(DEFAULTS.get(f,0))
+            st.success(f"✅ Loaded {parsed} valid values from file")
+            st.info(f"ℹ️ {len(features)-parsed} missing features filled with defaults")
+        else:
+            example_txt = "\n".join([f"{f}: {DEFAULTS.get(f,0)}" for f in features])
+            st.download_button("📥 Download Example Format", data=example_txt, file_name="sepsis_patient_example.txt", mime="text/plain", use_container_width=True)
+            for f in features: inputs[f]=float(DEFAULTS.get(f,0))
     else:
-        for grp_name, feats in GROUPS:
-            with st.expander(grp_name, expanded=(grp_name == "📊 Vital Signs")):
+        for grp,feats in GROUPS:
+            with st.expander(grp,expanded=(grp=="📊 Vital Signs")):
                 for feat in feats:
-                    lbl  = FEATURE_LABELS.get(feat, feat)
-                    cfg  = CLINICAL_RANGES.get(feat, (0, 200, 0, 300, ''))
-                    unit = cfg[4]
-                    lo   = float(cfg[2])
-                    hi   = float(cfg[3])
-                    dflt = float(DEFAULTS.get(feat, (lo + hi) / 2))
-                    disp = f"{lbl}  [{unit}]" if unit else lbl
-                    val  = st.number_input(
-                        disp,
-                        min_value=lo,
-                        max_value=hi,
-                        value=dflt,
-                        step=0.1,
-                        key=f"inp_{feat}"
-                    )
-                    inputs[feat] = val
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    predict_btn = st.button(
-        "⚡  Analyze Sepsis Risk",
-        type="primary",
-        use_container_width=True
-    )
-
-    st.markdown("<hr style='border:1px solid #0a1e2a;margin:14px 0'>", unsafe_allow_html=True)
-    st.markdown("""
-    <div style='font-size:10.5px;color:#1e3548;line-height:1.9;font-family:JetBrains Mono'>
-        <span style='color:#3a6a7a;font-weight:700'>Risk thresholds</span><br>
-        🟢 &lt;30% — Low risk<br>
-        🟡 30–60% — Moderate<br>
-        🔴 &gt;60% — High risk<br><br>
-        <span style='color:#3a6a7a;font-weight:700'>Model info</span><br>
-        XGBoost · AUROC 0.8158<br>
-        Sensitivity 0.74<br>
-        Specificity 0.81<br>
-        PhysioNet 2019 · 40,336 pts
-    </div>""", unsafe_allow_html=True)
+                    lbl=FEATURE_LABELS.get(feat,feat);cfg=CLINICAL_RANGES.get(feat,(0,200,0,300,''));unit=cfg[4]
+                    disp=f"{lbl} [{unit}]" if unit else lbl
+                    inputs[feat]=st.number_input(disp,min_value=float(cfg[2]),max_value=float(cfg[3]),
+                        value=float(DEFAULTS.get(feat,(cfg[2]+cfg[3])/2)),step=0.1,key=f"inp_{feat}")
+    st.markdown("<br>",unsafe_allow_html=True)
+    predict_btn=st.button("⚡  Analyze Sepsis Risk",type="primary",use_container_width=True)
+    st.markdown("""<hr style='border:1px solid #dde4ed;margin:14px 0'>
+    <div style='font-size:10.5px;color:#8aa0b8;line-height:2;font-family:JetBrains Mono'>
+        <b style='color:#4a6080'>Risk Thresholds</b><br>🟢 &lt;30% Low · 🟡 30–60% Moderate · 🔴 &gt;60% High<br></div>""",unsafe_allow_html=True)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# MAIN HEADER
-# ══════════════════════════════════════════════════════════════════════════════
-now_str = datetime.now().strftime("%Y-%m-%d  %H:%M")
-hc1, hc2 = st.columns([3.2, 1])
-with hc1:
-    st.markdown(f"""
-    <div class='header-card'>
-        <p class='header-title'>Sepsis Early <span class='teal'>Warning</span> System</p>
-        <p class='header-sub'>
-            AI-powered ICU monitoring · 6-hour early prediction · XGBoost + SHAP Explainability<br>
-            <span style='opacity:0.45'>PhysioNet CinC 2019 · 40,336 patients · AUROC 0.8158</span>
-        </p>
-    </div>""", unsafe_allow_html=True)
-with hc2:
-    st.markdown(f"""
-    <div style='text-align:right;padding-top:8px'>
-        <span class='badge'>XGBoost</span>
-        <span class='badge'>SHAP</span>
-        <span class='badge badge-red'>LIVE</span><br>
-        <div class='time-badge' style='margin-top:10px'>{now_str}</div>
-    </div>""", unsafe_allow_html=True)
+# ═══ HEADER ═══
+st.markdown(f"""<div class="hdr-wrap">
+    <div class="hdr-title">Sepsis Early Warning System</div>
+    <div class="hdr-sub">ICU Clinical Decision Support — Real-Time Risk Stratification</div>
+    <div><span class="hdr-badge hdr-live">● LIVE MONITORING</span></div>
+</div>""", unsafe_allow_html=True)
 
-st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-# Stats bar
-s1, s2, s3, s4, s5 = st.columns(5)
-for col, (num, lbl) in zip([s1, s2, s3, s4, s5], [
-    ("40,336", "Training Patients"),
-    ("0.8158", "AUROC Score"),
-    ("6 hrs",  "Early Warning"),
-    ("17",     "Clinical Features"),
-    ("0.74/0.81", "Sens / Spec"),
-]):
-    with col:
-        st.markdown(
-            f'<div class="stat-card"><p class="stat-num">{num}</p><p class="stat-lbl">{lbl}</p></div>',
-            unsafe_allow_html=True
-        )
-
-st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# PREDICTION BLOCK
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══ PREDICTION ═══
+if 'risk_pct' not in st.session_state: st.session_state.risk_pct=None
 if predict_btn:
-    # Build input array in the exact feature order the model expects
-    input_array = np.array([[float(inputs.get(f, DEFAULTS.get(f, 0.0))) for f in features]])
+    if 'pdf_data' in st.session_state: del st.session_state.pdf_data
+    if 'xlsx_data' in st.session_state: del st.session_state.xlsx_data
+    arr=np.array([[inputs.get(f,0) for f in features]])
+    arr_s=scaler.transform(arr);raw_prob=float(model.predict_proba(arr_s)[0][1])
+    # Calibrate probability to counteract balanced training dataset squashing
+    prob = float(np.interp(raw_prob, [0.0, 0.30, 0.68, 0.70, 1.0], [0.0, 0.05, 0.45, 0.85, 1.0]))
+    st.session_state.risk_pct=round(prob*100,1)
+    shap_vals=explainer.shap_values(arr_s)
+    sv=shap_vals[0] if isinstance(shap_vals,list) else shap_vals[0]
+    st.session_state.shap_dict={features[i]:float(sv[i]) for i in range(len(features))}
+    st.session_state.inputs=dict(inputs)
 
-    with st.spinner("🔬 Analyzing patient vitals..."):
-        time.sleep(0.4)
-        proba      = model.predict_proba(input_array)[0]
-        risk_score = float(proba[1])
-        risk_pct   = round(risk_score * 100, 1)
+if st.session_state.risk_pct is not None:
+    rp=st.session_state.risk_pct;inp=st.session_state.inputs;feat_imp=st.session_state.shap_dict
+    sirs_dict=compute_sirs(inp);sirs_met=sum(sirs_dict.values());sofa=compute_sofa(inp);si=shock_index(inp)
+    risk_cls='risk-high' if rp>=60 else 'risk-mod' if rp>=30 else 'risk-low'
+    risk_lbl='HIGH RISK' if rp>=60 else 'MODERATE' if rp>=30 else 'LOW RISK'
+    risk_msg='Immediate clinical intervention required. Activate SEP-1.' if rp>=60 else 'Close monitoring recommended. Reassess in 30 min.' if rp>=30 else 'Continue routine monitoring every 4 hours.'
+    prog_clr='#dc2626' if rp>=60 else '#d97706' if rp>=30 else '#059669'
 
-    # Clinical scores
-    sirs_dict = compute_sirs(inputs)
-    sirs_met  = sum(sirs_dict.values())
-    sofa      = compute_sofa(inputs)
-    si        = shock_index(inputs)
-    recs      = clinical_recs(risk_pct, inputs, sirs_met, sofa)
+    organ_data={o:{'risk':organ_risk_pct(o,inp,rp/100)} for o in ORGAN_FEATURES}
 
-    # Risk tier
-    if risk_pct >= 60:
-        css, icon, level = "risk-high", "🔴", "HIGH RISK"
-        msg      = "Sepsis predicted within 6 hours — Immediate clinical review required"
-        bar_clr  = "#dc2626"
-        bar_grad = "linear-gradient(90deg, #7f1d1d, #dc2626)"
-        alert_c  = "a-high"
-        sum_bg   = "#2a0404"; sum_brd = "#8a1a1a"; sum_clr = "#fca5a5"
-    elif risk_pct >= 30:
-        css, icon, level = "risk-mod", "🟡", "MODERATE RISK"
-        msg      = "Elevated sepsis risk — Monitor closely, reassess every 30 minutes"
-        bar_clr  = "#d97706"
-        bar_grad = "linear-gradient(90deg, #78350f, #d97706)"
-        alert_c  = "a-mod"
-        sum_bg   = "#2a1500"; sum_brd = "#7a4800"; sum_clr = "#fde68a"
-    else:
-        css, icon, level = "risk-low", "🟢", "LOW RISK"
-        msg      = "No immediate sepsis threat — Continue standard monitoring"
-        bar_clr  = "#059669"
-        bar_grad = "linear-gradient(90deg, #064e3b, #059669)"
-        alert_c  = "a-low"
-        sum_bg   = "#01180a"; sum_brd = "#1a6a3a"; sum_clr = "#6ee7b7"
+    # ── Stats row
+    c1,c2,c3,c4,c5=st.columns(5)
+    stats=[('Sepsis Risk',f'{rp}%','risk-stat'),('SIRS Score',f'{sirs_met}/4','sirs-stat'),
+           ('SOFA Score',f'{sofa}','sofa-stat'),('Shock Index',f'{si}','si-stat'),
+           ('Timestamp',datetime.now().strftime('%H:%M:%S'),'time-stat')]
+    for col,(lbl,val,_) in zip([c1,c2,c3,c4,c5],stats):
+        col.markdown(f'<div class="stat-card"><div class="stat-num">{val}</div><div class="stat-lbl">{lbl}</div></div>',unsafe_allow_html=True)
 
-    pct_w = min(int(risk_pct), 100)
+    st.markdown(f"""<div class="prog-track"><div class="prog-fill" style="width:{min(rp,100)}%;background:{prog_clr}"></div></div>
+    <div class="prog-labels"><span>0% Safe</span><span>30% Moderate</span><span>60% High</span><span>100% Critical</span></div>""",unsafe_allow_html=True)
+    st.markdown("")
 
-    # ── ROW 1: Risk score (left) + SHAP bar (right) ───────────────────────────
-    col_l, col_r = st.columns([1, 1.08], gap="large")
+    # ── Tabs
+    tabs=st.tabs(["🎯 Risk Overview","📊 SHAP Analysis","🫀 Body Map","📋 Clinical Scores","📥 Export"])
 
-    with col_l:
-        # Risk card — NO circle/ring
-        st.markdown('<p class="s-hdr">Risk Assessment</p>', unsafe_allow_html=True)
-        st.markdown(f"""
-        <div class="risk-card {css}">
-            <p class="risk-pct">{risk_pct}%</p>
-            <p class="risk-level">{icon} {level}</p>
-            <p class="risk-msg">{msg}</p>
-        </div>""", unsafe_allow_html=True)
+    # ──── TAB 0: Risk Overview ────
+    with tabs[0]:
+        col_r,col_v=st.columns([1,2])
+        with col_r:
+            st.markdown(f"""<div class="risk-card {risk_cls}">
+                <div class="risk-pct">{rp}%</div><div class="risk-level">{risk_lbl}</div>
+                <div class="risk-msg">{risk_msg}</div></div>""",unsafe_allow_html=True)
+            st.markdown("<br>",unsafe_allow_html=True)
+            recs=clinical_recs(rp,inp,sirs_met,sofa)
+            for sev,title,msg in recs:
+                cls={'high':'rc-high','mod':'rc-mod','low':'rc-low','info':'rc-info'}[sev]
+                st.markdown(f'<div class="rec-card {cls}"><div class="rec-title">{title}</div>{msg}</div>',unsafe_allow_html=True)
+        with col_v:
+            st.markdown('<div class="s-hdr">Patient Vital Signs</div>',unsafe_allow_html=True)
+            vital_feats=[f for f in inp if f in CLINICAL_RANGES and f not in ('Age','HospAdmTime','ICULOS')]
+            cols_per_row=4
+            for i in range(0,len(vital_feats),cols_per_row):
+                batch=vital_feats[i:i+cols_per_row]
+                cols=st.columns(cols_per_row)
+                for j,feat in enumerate(batch):
+                    v=inp[feat];s=vital_status(feat,v);cfg=CLINICAL_RANGES[feat]
+                    chip_cls=vital_chip_class(s);vc=vital_color(s)
+                    lbl=FEATURE_LABELS.get(feat,feat);unit=cfg[4]
+                    cols[j].markdown(f"""<div class="vital-chip {chip_cls}">
+                        <div class="vital-name">{lbl}</div>
+                        <div class="vital-val" style="color:{vc}">{v:.1f}</div>
+                        <div class="vital-unit">{unit}</div>
+                        <div class="vital-range">N: {cfg[0]}-{cfg[1]}</div></div>""",unsafe_allow_html=True)
+            st.markdown("<br>",unsafe_allow_html=True)
+            st.markdown('<div class="s-hdr">SIRS Criteria</div>',unsafe_allow_html=True)
+            sirs_html='<div class="sirs-wrap">'
+            for crit,met in sirs_dict.items():
+                dot_c='#059669' if met else '#dc2626'
+                sirs_html+=f'<div class="sirs-row"><div class="sirs-dot" style="background:{dot_c}"></div><span>{crit}</span><span style="margin-left:auto;font-weight:700;color:{dot_c}">{"MET" if met else "NOT MET"}</span></div>'
+            sirs_html+='</div>'
+            st.markdown(sirs_html,unsafe_allow_html=True)
+            sts='a-high' if sirs_met>=3 else 'a-mod' if sirs_met>=2 else 'a-low'
+            st.markdown(f'<div class="alert-strip {sts}">SIRS: {sirs_met}/4 criteria met</div>',unsafe_allow_html=True)
 
-        st.markdown(f"""
-        <div class="prog-track">
-            <div class="prog-fill" style="width:{pct_w}%;background:{bar_grad}"></div>
-        </div>
-        <div class="prog-labels">
-            <span>0%</span><span>◂30%</span><span>◂60%</span><span>100%</span>
-        </div>""", unsafe_allow_html=True)
 
-        st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+    # ──── TAB 1: SHAP Analysis ────
+    with tabs[1]:
+        st.markdown('<div class="s-hdr">SHAP Feature Importance — XGBoost Explainability</div>',unsafe_allow_html=True)
+        sorted_feats=sorted(feat_imp.items(),key=lambda x:abs(x[1]),reverse=True)
+        top_n=min(12,len(sorted_feats))
+        top=sorted_feats[:top_n]; labels=[FEATURE_LABELS.get(k,k) for k,_ in reversed(top)]
+        vals=[v for _,v in reversed(top)]
 
-        # ── Clinical severity scores ───────────────────────────────────────
-        st.markdown('<p class="s-hdr">Clinical Severity Scores</p>', unsafe_allow_html=True)
-        sc1, sc2, sc3 = st.columns(3)
-        with sc1:
-            c = "#f87171" if sirs_met >= 2 else "#fbbf24" if sirs_met == 1 else "#4ade80"
-            b = "#7a1a1a" if sirs_met >= 2 else "#7a4800" if sirs_met == 1 else "#1a5a3a"
-            st.markdown(f"""<div class="score-box" style="border-color:{b};background:#07111f">
-                <p class="score-num" style="color:{c}">{sirs_met}/4</p>
-                <p class="score-lbl" style="color:{c}88">SIRS Criteria</p></div>""",
-                unsafe_allow_html=True)
-        with sc2:
-            c = "#f87171" if sofa >= 6 else "#fbbf24" if sofa >= 3 else "#4ade80"
-            b = "#7a1a1a" if sofa >= 6 else "#7a4800" if sofa >= 3 else "#1a5a3a"
-            st.markdown(f"""<div class="score-box" style="border-color:{b};background:#07111f">
-                <p class="score-num" style="color:{c}">{sofa}</p>
-                <p class="score-lbl" style="color:{c}88">SOFA Score</p></div>""",
-                unsafe_allow_html=True)
-        with sc3:
-            c = "#f87171" if si > 1.0 else "#fbbf24" if si > 0.7 else "#4ade80"
-            b = "#7a1a1a" if si > 1.0 else "#7a4800" if si > 0.7 else "#1a5a3a"
-            st.markdown(f"""<div class="score-box" style="border-color:{b};background:#07111f">
-                <p class="score-num" style="color:{c}">{si}</p>
-                <p class="score-lbl" style="color:{c}88">Shock Index</p></div>""",
-                unsafe_allow_html=True)
+        fig,ax=plt.subplots(figsize=(10,5)); style_ax(ax,fig)
+        colors=['#dc2626' if v>0 else '#059669' for v in vals]
+        bars=ax.barh(range(len(labels)),vals,color=colors,height=0.6,edgecolor='none',alpha=0.85)
+        ax.set_yticks(range(len(labels)));ax.set_yticklabels(labels,fontsize=9,fontfamily='monospace')
+        ax.set_xlabel('SHAP Value (Impact on Prediction)',fontsize=10)
+        ax.set_title('Feature Contributions to Sepsis Risk',fontsize=13,fontweight='bold',color='#1a2636',pad=14)
+        ax.axvline(x=0,color='#8aa0b8',linewidth=0.8,alpha=0.4)
+        ax.grid(axis='x',alpha=0.08);ax.tick_params(axis='y',length=0)
+        red_patch=mpatches.Patch(color='#dc2626',label='↑ Increases Risk')
+        green_patch=mpatches.Patch(color='#059669',label='↓ Decreases Risk')
+        ax.legend(handles=[red_patch,green_patch],loc='lower right',fontsize=8,framealpha=0.8)
+        fig.tight_layout(); st.pyplot(fig); plt.close(fig)
 
-        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+        st.markdown("**Top 5 Risk Drivers:**")
+        for k,v in sorted_feats[:5]:
+            dr="↑ increases" if v>0 else "↓ decreases"
+            st.markdown(f"- **{FEATURE_LABELS.get(k,k)}** ({v:+.4f}) — {dr} sepsis risk")
 
-        # ── SIRS breakdown ─────────────────────────────────────────────────
-        st.markdown('<p class="s-hdr">SIRS Criteria Breakdown</p>', unsafe_allow_html=True)
-        st.markdown("<div class='sirs-wrap'>", unsafe_allow_html=True)
-        for criterion, met in sirs_dict.items():
-            dot_clr = '#dc2626' if met else '#059669'
-            txt_clr = '#fca5a5' if met else '#6ee7b7'
-            icon_s  = '✗' if met else '✓'
-            st.markdown(f"""
-            <div class='sirs-row'>
-                <div class='sirs-dot' style='background:{dot_clr}'></div>
-                <span style='color:{txt_clr}'>{icon_s} {criterion}</span>
-            </div>""", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    # ──── TAB 2: Body Map ────
+    with tabs[2]:
+        st.markdown('<div class="s-hdr">Anatomical Risk Visualization</div>',unsafe_allow_html=True)
+        st.markdown('<div class="i-box">Select an organ below to inspect its risk level and associated biomarkers.</div>',unsafe_allow_html=True)
+        st.markdown("")
+        organ_names=list(ORGAN_FEATURES.keys())
+        sel_organ=st.radio("Select Organ",organ_names,horizontal=True,key='organ_sel')
 
-        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+        col_map,col_det=st.columns([1,1])
+        with col_map:
+            svg_html=render_body_map(organ_data,sel_organ)
+            st_html.html(svg_html, height=760, scrolling=False)
+        with col_det:
+            od=organ_data[sel_organ]; risk_v=od['risk']
+            oc='#dc2626' if risk_v>=60 else '#d97706' if risk_v>=30 else '#059669'
+            olbl='CRITICAL' if risk_v>=60 else 'ELEVATED' if risk_v>=30 else 'NORMAL'
+            st.markdown(f"""<div class="organ-risk-card" style="border-color: {oc};">
+                <div class="organ-risk-title">{sel_organ}</div>
+                <div class="organ-risk-value" style="color: {oc};">{risk_v}%</div>
+                <div class="organ-risk-badge" style="background: {oc}15; color: {oc}; border-color: {oc}44;">{olbl}</div>
+            </div>""",unsafe_allow_html=True)
+            st.markdown("<br>",unsafe_allow_html=True)
+            st.markdown(f'<div class="s-hdr">{sel_organ} — Associated Biomarkers</div>',unsafe_allow_html=True)
+            for bf in ORGAN_FEATURES.get(sel_organ,[]):
+                if bf in inp:
+                    bv=inp[bf];bs=vital_status(bf,bv);bc=vital_color(bs);cfg=CLINICAL_RANGES.get(bf,('','','','',''))
+                    st.markdown(f"""<div class="biomarker-row" style="border-left-color: {bc};">
+                        <span class="biomarker-label">{FEATURE_LABELS.get(bf,bf)}</span>
+                        <span class="biomarker-val" style="color:{bc}">{bv:.1f} <span style="font-size:10px;opacity:0.7;font-weight:600">{cfg[4]}</span></span>
+                    </div>""",unsafe_allow_html=True)
 
-        # ── Recommendations ────────────────────────────────────────────────
-        st.markdown('<p class="s-hdr">Clinical Recommendations</p>', unsafe_allow_html=True)
-        rc_map = {"high":"rc-high","mod":"rc-mod","low":"rc-low","info":"rc-info"}
-        for i, (typ, title, text) in enumerate(recs):
-            st.markdown(f"""
-            <div class="rec-card {rc_map.get(typ,'rc-info')}" style="animation-delay:{i*0.1}s">
-                <div class="rec-title">{title}</div>
-                {text}
-            </div>""", unsafe_allow_html=True)
+    # ──── TAB 3: Clinical Scores ────
+    with tabs[3]:
+        st.markdown('<div class="s-hdr">Clinical Scoring Systems</div>',unsafe_allow_html=True)
+        cs1,cs2,cs3=st.columns(3)
+        cs1.markdown(f"""<div class="score-box" style="border-top:3px solid {'#dc2626' if sofa>=6 else '#d97706' if sofa>=2 else '#059669'}">
+            <div class="score-num" style="color:{'#dc2626' if sofa>=6 else '#d97706' if sofa>=2 else '#059669'}">{sofa}</div>
+            <div class="score-lbl">SOFA Score</div></div>""",unsafe_allow_html=True)
+        cs2.markdown(f"""<div class="score-box" style="border-top:3px solid {'#dc2626' if sirs_met>=3 else '#d97706' if sirs_met>=2 else '#059669'}">
+            <div class="score-num" style="color:{'#dc2626' if sirs_met>=3 else '#d97706' if sirs_met>=2 else '#059669'}">{sirs_met}/4</div>
+            <div class="score-lbl">SIRS Criteria</div></div>""",unsafe_allow_html=True)
+        si_c='#dc2626' if si>1.0 else '#d97706' if si>0.7 else '#059669'
+        cs3.markdown(f"""<div class="score-box" style="border-top:3px solid {si_c}">
+            <div class="score-num" style="color:{si_c}">{si}</div>
+            <div class="score-lbl">Shock Index</div></div>""",unsafe_allow_html=True)
 
-    with col_r:
-        # ── SHAP top-12 horizontal bar ─────────────────────────────────────
-        st.markdown('<p class="s-hdr">SHAP Explanation — Feature Impact</p>', unsafe_allow_html=True)
+        st.markdown("")
+        st.markdown('<div class="s-hdr">Score Breakdown</div>',unsafe_allow_html=True)
+        detail_html='<div class="scores-box">'
+        score_items=[("O₂ Saturation",f"{inp.get('O2Sat',0):.0f}%"),
+            ("Bilirubin",f"{inp.get('Bilirubin_total',0):.1f} mg/dL"),
+            ("MAP",f"{inp.get('MAP',0):.0f} mmHg"),
+            ("Creatinine",f"{inp.get('Creatinine',0):.1f} mg/dL"),
+            ("Lactate",f"{inp.get('Lactate',0):.1f} mmol/L"),
+            ("Heart Rate",f"{inp.get('HR',0):.0f} bpm"),
+            ("WBC Count",f"{inp.get('WBC',0):.1f} K/µL")]
+        for lbl,val in score_items:
+            detail_html+=f'<div class="score-row"><span class="score-label">{lbl}</span><span class="score-value">{val}</span></div>'
+        detail_html+='</div>'
+        st.markdown(detail_html,unsafe_allow_html=True)
 
-        shap_values = explainer.shap_values(input_array)
-        sv          = shap_values[0]
-        feat_imp    = {f: float(sv[i]) for i, f in enumerate(features)}
-        top12       = dict(sorted(feat_imp.items(), key=lambda x: abs(x[1]), reverse=True)[:12])
-
-        labels_s = [FEATURE_LABELS.get(k, k) for k in top12]
-        vals_s   = list(top12.values())
-        clrs_s   = [(0.96, 0.37, 0.37, 0.85) if v > 0 else (0.22, 0.83, 0.56, 0.85) for v in vals_s]
-
-        fig1, ax1 = plt.subplots(figsize=(7.0, 5.2))
-        style_ax(ax1, fig1)
-
-        bars1 = ax1.barh(labels_s[::-1], vals_s[::-1], color=clrs_s[::-1],
-                         edgecolor='none', height=0.62)
-        ax1.axvline(0, color=(1, 1, 1, 0.14), linewidth=0.8)
-
-        # Subtle row stripes
-        for i, bar in enumerate(bars1):
-            if i % 2 == 0:
-                ax1.barh(bar.get_y() - 0.01, 9e3, left=-9e3,
-                         height=bar.get_height() + 0.02,
-                         color=(1, 1, 1, 0.015), zorder=0)
-
-        # Value labels on bars — readable white text
-        for bar, v in zip(bars1, vals_s[::-1]):
-            off = 0.002 if v >= 0 else -0.002
-            ax1.text(v + off, bar.get_y() + bar.get_height() / 2,
-                     f'{v:+.3f}', va='center',
-                     ha='left' if v >= 0 else 'right',
-                     color='#d0e8f0', fontsize=7.5,
-                     fontfamily='monospace', fontweight='500')
-
-        ax1.set_xlabel('SHAP value  (impact on prediction)', fontsize=8.5)
-        ax1.set_title('Feature contributions — current patient', color=TEXT_C,
-                      fontsize=9.5, fontweight='600', pad=10)
-        ax1.grid(axis='x', color=GRID_C, linewidth=0.5)
-
-        red_p   = mpatches.Patch(color=(0.96, 0.37, 0.37), label='↑ Increases risk')
-        green_p = mpatches.Patch(color=(0.22, 0.83, 0.56), label='↓ Decreases risk')
-        ax1.legend(handles=[red_p, green_p], loc='lower right',
-                   facecolor=BG, edgecolor=(1, 1, 1, 0.08),
-                   labelcolor=TICK_C, fontsize=8.5)
-
-        plt.tight_layout(pad=1.0)
-        st.pyplot(fig1, use_container_width=True)
-        plt.close()
-
-        # Top driver explainer box
-        top_feat = list(top12.keys())[0]
-        top_val  = list(top12.values())[0]
-        top_lbl  = FEATURE_LABELS.get(top_feat, top_feat)
-        top_inp  = inputs.get(top_feat, 0)
-        unit_t   = CLINICAL_RANGES.get(top_feat, ('', '', '', '', ''))[4]
-        direction = "↑ increasing" if top_val > 0 else "↓ decreasing"
-        dir_clr   = "#f87171" if top_val > 0 else "#4ade80"
-
-        st.markdown(f"""
-        <div class="i-box" style="margin-top:8px">
-            <b style='color:#00c8b4'>Top driver:</b>
-            <b style='color:#fbbf24'> {top_lbl}</b>
-            <span style='font-family:JetBrains Mono;color:#d0e8f0'> = {top_inp:.1f} {unit_t}</span>
-            <span style='color:#6a9aaa'> (SHAP </span>
-            <span style='font-family:JetBrains Mono;color:#d0e8f0'>{top_val:+.3f}</span>
-            <span style='color:#6a9aaa'>)</span> —
-            strongest factor <b style='color:{dir_clr}'>{direction}</b> risk.<br><br>
-            <span style='color:#3a6070'>🔴 Red bar = pushes risk higher &nbsp;·&nbsp;
-            🟢 Green bar = pulls risk lower</span>
-        </div>""", unsafe_allow_html=True)
-
-        # ── Model probability bar ──────────────────────────────────────────
-        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-        st.markdown('<p class="s-hdr">Model Probability Distribution</p>', unsafe_allow_html=True)
-
-        fig2, ax2 = plt.subplots(figsize=(7.0, 1.55))
-        style_ax(ax2, fig2)
-
-        no_risk = 1 - risk_score
-        ax2.barh(['No Sepsis', 'Sepsis'],
-                 [no_risk, risk_score],
-                 color=[(0.22, 0.83, 0.56, 0.78), (0.96, 0.37, 0.37, 0.78)],
-                 edgecolor='none', height=0.45)
-        ax2.axvline(0.5, color=(1, 1, 1, 0.18), linewidth=0.8, linestyle='--')
-        ax2.set_xlim(0, 1)
-        ax2.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
-        ax2.set_xticklabels(['0%', '25%', '50%', '75%', '100%'], fontsize=8)
-        ax2.tick_params(colors=TICK_C, labelsize=8)
-        for s in ax2.spines.values():
-            s.set_visible(False)
-
-        ax2.text(no_risk - 0.01, 0, f'{no_risk*100:.1f}%', va='center', ha='right',
-                 color='#4ade80', fontsize=10, fontweight='bold')
-        ax2.text(risk_score - 0.01, 1, f'{risk_score*100:.1f}%', va='center', ha='right',
-                 color='#f87171', fontsize=10, fontweight='bold')
-
-        plt.tight_layout(pad=0.6)
-        st.pyplot(fig2, use_container_width=True)
-        plt.close()
-
-    # ── ROW 2: Vitals grid (left) + Radar + Quick Scores (right) ─────────────
-    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-    v1, v2 = st.columns([1.7, 1], gap="large")
-
-    with v1:
-        st.markdown('<p class="s-hdr">Current Vitals — Status Overview</p>', unsafe_allow_html=True)
-
-        vitals_show = ['HR', 'O2Sat', 'Temp', 'SBP', 'MAP', 'DBP',
-                       'Resp', 'WBC', 'Lactate', 'Creatinine', 'pH', 'Glucose', 'Hgb']
-        vitals_show = [v for v in vitals_show if v in inputs]
-
-        rows_v = [vitals_show[i:i+4] for i in range(0, len(vitals_show), 4)]
-        for row_feats in rows_v:
-            cols_v = st.columns(len(row_feats))
-            for col_v, feat in zip(cols_v, row_feats):
-                val    = inputs[feat]
-                status = vital_status(feat, val)
-                unit   = CLINICAL_RANGES.get(feat, ('', '', '', '', ''))[4]
-                lbl    = FEATURE_LABELS.get(feat, feat)
-                clr    = vital_color(status)
-                chip   = vital_chip_class(status)
-                mn     = CLINICAL_RANGES.get(feat, (0, 0, 0, 0, ''))[0]
-                mx     = CLINICAL_RANGES.get(feat, (0, 0, 0, 0, ''))[1]
-                with col_v:
-                    st.markdown(f"""
-                    <div class="vital-chip {chip}">
-                        <p class="vital-name">{lbl}</p>
-                        <p class="vital-val" style="color:{clr}">{val:.1f}
-                            <span class="vital-unit">{unit}</span>
-                        </p>
-                        <p class="vital-range">{mn}–{mx}</p>
-                    </div>""", unsafe_allow_html=True)
-
-        # Alert strips
-        st.markdown("<div style='height:7px'></div>", unsafe_allow_html=True)
-        crit_v = [FEATURE_LABELS.get(f, f) for f in vitals_show if vital_status(f, inputs[f]) == 'critical']
-        abno_v = [FEATURE_LABELS.get(f, f) for f in vitals_show if vital_status(f, inputs[f]) == 'abnormal']
-        norm_v = [FEATURE_LABELS.get(f, f) for f in vitals_show if vital_status(f, inputs[f]) == 'normal']
-
-        if crit_v:
-            st.markdown(f'<div class="alert-strip a-high">⚠️ CRITICAL — {", ".join(crit_v)}</div>',
-                        unsafe_allow_html=True)
-        if abno_v:
-            st.markdown(f'<div class="alert-strip a-mod">⚡ ABNORMAL — {", ".join(abno_v)}</div>',
-                        unsafe_allow_html=True)
-        if not crit_v and not abno_v:
-            st.markdown('<div class="alert-strip a-low">✅ All displayed vitals within normal range</div>',
-                        unsafe_allow_html=True)
-
-        lact_val = inputs.get('Lactate', 1.5)
-        if lact_val > 4:
-            lact_msg = "Severe hyperlactatemia — tissue shock likely"
-            lact_cls = "a-high"
-        elif lact_val > 2:
-            lact_msg = "Elevated — possible tissue hypoperfusion"
-            lact_cls = "a-mod"
+        st.markdown("")
+        st.markdown('<div class="s-hdr">Sepsis-3 Assessment</div>',unsafe_allow_html=True)
+        s3_met=sofa>=2 and (inp.get('MAP',85)<65 or inp.get('Lactate',1)>2)
+        if s3_met:
+            st.markdown('<div class="alert-strip a-high">⚠️ SEPSIS-3 CRITERIA MET — Suspected Sepsis with Organ Dysfunction</div>',unsafe_allow_html=True)
+        elif sofa>=2:
+            st.markdown('<div class="alert-strip a-mod">⚡ SOFA ≥ 2 — Monitor for Sepsis Progression</div>',unsafe_allow_html=True)
         else:
-            lact_msg = "Within acceptable range"
-            lact_cls = "a-low"
-        st.markdown(f'<div class="alert-strip {lact_cls}">🧬 LACTATE {lact_val:.1f} mmol/L — {lact_msg}</div>',
-                    unsafe_allow_html=True)
+            st.markdown('<div class="alert-strip a-low">✅ Sepsis-3 Criteria NOT Met</div>',unsafe_allow_html=True)
 
-    with v2:
-        # ── Radar chart ────────────────────────────────────────────────────
-        st.markdown('<p class="s-hdr">Vital Signs Radar</p>', unsafe_allow_html=True)
+    # ──── TAB 4: Export ────
+    with tabs[4]:
+        st.markdown('<div class="s-hdr">Clinical Report Export</div>',unsafe_allow_html=True)
+        st.markdown('<div class="i-box">Download comprehensive clinical reports with all patient data, SHAP analysis, organ risk assessment, and scoring system details.</div>',unsafe_allow_html=True)
+        st.markdown("")
+        ex1,ex2=st.columns(2)
+        with ex1:
+            if st.button("🛠️ Generate PDF Report", use_container_width=True):
+                with st.spinner("Generating PDF..."):
+                    st.session_state.pdf_data = generate_pdf(inp,rp,feat_imp,sirs_dict,sofa,si,organ_data, st.session_state.patient_name)
+            
+            if "pdf_data" in st.session_state:
+                st.download_button("📄 Download PDF",data=st.session_state.pdf_data,file_name=f"sepsis_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                    mime="application/pdf",use_container_width=True,type="primary")
+        with ex2:
+            if st.button("🛠️ Generate Excel Report", use_container_width=True):
+                with st.spinner("Generating Excel..."):
+                    st.session_state.xlsx_data = generate_excel(inp,rp,feat_imp,sirs_dict,sofa,si,organ_data, st.session_state.patient_name)
+            
+            if "xlsx_data" in st.session_state:
+                st.download_button("📊 Download Excel",data=st.session_state.xlsx_data,file_name=f"sepsis_data_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",use_container_width=True)
+        st.markdown("")
+        st.markdown("**Report includes:** Patient vitals, risk assessment, SHAP analysis, organ risk mapping, SIRS/SOFA/Shock Index scores, and clinical recommendations.")
 
-        radar_feats = ['HR', 'O2Sat', 'Temp', 'SBP', 'Resp', 'WBC', 'Lactate', 'pH']
-        radar_feats = [f for f in radar_feats if f in inputs]
-        N = len(radar_feats)
-        angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist() + [0]
+    # ── Summary bar
+    sb_cls='a-high' if rp>=60 else 'a-mod' if rp>=30 else 'a-low'
+    emoji='🔴' if rp>=60 else '🟡' if rp>=30 else '🟢'
+    st.markdown(f'<div class="summary-bar {sb_cls}">{emoji}  SEPSIS RISK: {rp}%  •  SIRS: {sirs_met}/4  •  SOFA: {sofa}  •  SI: {si}  •  {risk_lbl}</div>',unsafe_allow_html=True)
 
-        def norm_vital(feat, val):
-            mn, mx, clo, chi, _ = CLINICAL_RANGES.get(feat, (0, 1, 0, 1, ''))
-            r = chi - clo
-            return max(0.0, min(1.0, (val - clo) / r)) if r > 0 else 0.5
-
-        patient_norm = [norm_vital(f, inputs[f]) for f in radar_feats] + [norm_vital(radar_feats[0], inputs[radar_feats[0]])]
-        default_norm = [norm_vital(f, DEFAULTS[f]) for f in radar_feats] + [norm_vital(radar_feats[0], DEFAULTS[radar_feats[0]])]
-
-        fig3, ax3 = plt.subplots(figsize=(4.0, 4.0), subplot_kw=dict(polar=True))
-        fig3.patch.set_facecolor(BG)
-        ax3.set_facecolor(BG)
-
-        for r in [0.25, 0.5, 0.75, 1.0]:
-            ax3.plot(angles, [r] * len(angles), color=(1, 1, 1, 0.07), linewidth=0.5)
-
-        # Normal baseline
-        ax3.plot(angles, default_norm, color=(0.22, 0.83, 0.56, 0.45),
-                 linewidth=1.2, linestyle='--')
-        ax3.fill(angles, default_norm, color=(0.22, 0.83, 0.56, 0.05))
-
-        # Patient
-        if risk_pct >= 60:
-            p_clr = (0.96, 0.37, 0.37)
-        elif risk_pct >= 30:
-            p_clr = (0.95, 0.77, 0.22)
-        else:
-            p_clr = (0.22, 0.83, 0.56)
-
-        ax3.plot(angles, patient_norm, color=(*p_clr, 0.9), linewidth=2.0)
-        ax3.fill(angles, patient_norm, color=(*p_clr, 0.12))
-
-        ax3.set_xticks(angles[:-1])
-        ax3.set_xticklabels(
-            [FEATURE_LABELS.get(f, f) for f in radar_feats],
-            color='#5a8090', fontsize=7.5
-        )
-        ax3.set_yticks([])
-        ax3.spines['polar'].set_color((1, 1, 1, 0.08))
-        ax3.grid(color=(1, 1, 1, 0.06), linewidth=0.5)
-        ax3.set_title('Patient vs. Normal Baseline', color='#7ab8c8',
-                      fontsize=9, pad=12)
-
-        plt.tight_layout()
-        st.pyplot(fig3, use_container_width=True)
-        plt.close()
-
-        # Quick scores table
-        st.markdown(f"""
-        <div class="scores-box" style="margin-top:10px">
-            <div style="font-size:9.5px;color:#2a5a6a;text-transform:uppercase;
-                        letter-spacing:1.2px;margin-bottom:8px;
-                        font-family:JetBrains Mono;font-weight:700">Quick Scores</div>
-            <div class='score-row'>
-                <span class='score-label'>Shock Index (HR/SBP)</span>
-                <span class='score-value' style='color:{("#f87171" if si>1.0 else "#fbbf24" if si>0.7 else "#4ade80")}'>{si}</span>
-            </div>
-            <div class='score-row'>
-                <span class='score-label'>SOFA Score (approx)</span>
-                <span class='score-value' style='color:{("#f87171" if sofa>=6 else "#fbbf24" if sofa>=3 else "#4ade80")}'>{sofa}/12</span>
-            </div>
-            <div class='score-row'>
-                <span class='score-label'>SIRS Criteria</span>
-                <span class='score-value' style='color:{("#f87171" if sirs_met>=2 else "#fbbf24" if sirs_met==1 else "#4ade80")}'>{sirs_met}/4</span>
-            </div>
-            <div class='score-row'>
-                <span class='score-label'>Risk Probability</span>
-                <span class='score-value' style='color:{bar_clr}'>{risk_pct}%</span>
-            </div>
-        </div>""", unsafe_allow_html=True)
-
-    # ── All-features SHAP bar ─────────────────────────────────────────────────
-    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-    st.markdown('<p class="s-hdr">All Feature Contributions — Extended View (All 17 Features)</p>',
-                unsafe_allow_html=True)
-
-    all_sorted  = sorted(feat_imp.items(), key=lambda x: abs(x[1]), reverse=True)
-    all_labels  = [FEATURE_LABELS.get(k, k) for k, _ in all_sorted]
-    all_vals    = [v for _, v in all_sorted]
-    all_colors  = [(0.96, 0.37, 0.37, 0.82) if v > 0 else (0.22, 0.83, 0.56, 0.82) for v in all_vals]
-
-    fig4, ax4 = plt.subplots(figsize=(12, 3.8))
-    style_ax(ax4, fig4)
-
-    x_pos = range(len(all_labels))
-    bars4 = ax4.bar(list(x_pos), all_vals, color=all_colors, edgecolor='none', width=0.65)
-    ax4.axhline(0, color=(1, 1, 1, 0.12), linewidth=0.8)
-
-    # Alternating faint column bands
-    for i in range(0, len(all_labels), 2):
-        ax4.axvspan(i - 0.5, i + 0.5, alpha=0.03, color='white', zorder=0)
-
-    ax4.set_xticks(list(x_pos))
-    ax4.set_xticklabels(all_labels, rotation=32, ha='right', color='#6a9aaa', fontsize=8.5)
-    ax4.set_ylabel('SHAP Value', fontsize=8.5)
-    ax4.set_title('SHAP Values — All 17 Features (current patient)', color=TEXT_C,
-                  fontsize=10, fontweight='600', pad=8)
-    ax4.grid(axis='y', color=GRID_C, linewidth=0.5)
-
-    for bar, v in zip(bars4, all_vals):
-        ax4.text(bar.get_x() + bar.get_width() / 2,
-                 v + (0.002 if v >= 0 else -0.002),
-                 f'{v:+.3f}', ha='center',
-                 va='bottom' if v >= 0 else 'top',
-                 color='#c8dde8', fontsize=6.5, fontfamily='monospace')
-
-    plt.tight_layout()
-    st.pyplot(fig4, use_container_width=True)
-    plt.close()
-
-    # ── Final summary bar ─────────────────────────────────────────────────────
-    st.markdown(f"""
-    <div class="summary-bar" style="background:{sum_bg};border:1px solid {sum_brd};color:{sum_clr}">
-        {icon} {level} — {risk_pct}% probability of sepsis within 6 hours &nbsp;|&nbsp;
-        SIRS {sirs_met}/4 &nbsp;·&nbsp; SOFA {sofa} &nbsp;·&nbsp; Shock Index {si}
-    </div>""", unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# DEFAULT STATE (before analysis button)
-# ══════════════════════════════════════════════════════════════════════════════
 else:
-    d1, d2 = st.columns(2)
-    with d1:
-        st.markdown("""
-        <div class="i-box" style="text-align:center;padding:34px 22px">
-            <div style="font-size:42px;margin-bottom:10px">👈</div>
-            <div style="font-size:15px;font-weight:700;color:#d0e8f0;margin-bottom:8px">Enter Patient Vitals</div>
-            <div style="font-size:12px;color:#3a6070">Use the sidebar to input ICU readings,<br>
-            then click <b style='color:#00c8b4'>Analyze Sepsis Risk</b></div>
-        </div>""", unsafe_allow_html=True)
-    with d2:
-        st.markdown("""
-        <div class="i-box" style="text-align:center;padding:34px 22px">
-            <div style="font-size:42px;margin-bottom:10px">💡</div>
-            <div style="font-size:15px;font-weight:700;color:#d0e8f0;margin-bottom:8px">Quick Demo</div>
-            <div style="font-size:12px;color:#3a6070">Switch to
-            <b style='color:#00c8b4'>Load preset scenario</b><br>
-            to instantly see High / Moderate / Normal examples</div>
-        </div>""", unsafe_allow_html=True)
+    # ── Default landing
+    st.markdown("")
+    how_cols=st.columns(4)
+    steps=[("1","Enter Vitals","Input parameters via sidebar"),("2","Run Analysis","XGBoost + SHAP prediction"),
+           ("3","Review Results","Risk scores, body map, vitals"),("4","Export Report","Download PDF or Excel")]
+    for col,(n,t,d) in zip(how_cols,steps):
+        col.markdown(f'<div class="step-card"><div class="step-n">{n}</div><div class="step-t">{t}</div><div class="step-d">{d}</div></div>',unsafe_allow_html=True)
+    st.markdown('<div class="alert-strip a-info">ℹ️  Enter patient vitals and click "Analyze Sepsis Risk" to begin</div>',unsafe_allow_html=True)
 
-    st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-    st.markdown('<p class="s-hdr">How This System Works</p>', unsafe_allow_html=True)
-
-    sc1, sc2, sc3, sc4 = st.columns(4)
-    for col, (n, t, d) in zip([sc1, sc2, sc3, sc4], [
-        ("1", "Input Vitals",      "Enter 17 ICU measurements — vitals, labs, and patient history"),
-        ("2", "XGBoost Predicts",  "Model trained on 40,336 ICU patients calculates 6-hour sepsis probability"),
-        ("3", "Risk Scored",       "Green / Amber / Red alert with SIRS, SOFA, and Shock Index computed live"),
-        ("4", "SHAP Explains",     "Bar chart shows which vital drove the prediction — transparent AI"),
-    ]):
-        with col:
-            st.markdown(f"""
-            <div class="step-card">
-                <p class="step-n">{n}</p>
-                <p class="step-t">{t}</p>
-                <p class="step-d">{d}</p>
-            </div>""", unsafe_allow_html=True)
-
-    st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-    st.markdown('<p class="s-hdr">Clinical Reference Ranges</p>', unsafe_allow_html=True)
-    ref_df = pd.DataFrame({
-        'Feature':        ['Heart Rate', 'O₂ Sat', 'Temperature', 'Lactate',
-                           'WBC', 'Creatinine', 'Blood pH', 'Resp Rate', 'MAP'],
-        'Normal Range':   ['60–100 bpm', '95–100%', '36.1–37.2 °C', '0.5–2.0 mmol/L',
-                           '4.5–11.0 K/µL', '0.7–1.2 mg/dL', '7.35–7.45', '12–20 /min', '70–105 mmHg'],
-        'Sepsis Signal':  ['>90 or <60', '<94%', '>38.3°C or <36°C', '>2.0 mmol/L',
-                           '>12 or <4 K/µL', '>1.5 mg/dL', '<7.35', '>22 /min', '<65 mmHg'],
-        'Severity':       ['Moderate', 'High', 'Moderate', 'High',
-                           'Moderate', 'Moderate', 'High', 'Moderate', 'Critical'],
-    })
-    st.dataframe(ref_df, use_container_width=True, hide_index=True)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# FOOTER
-# ══════════════════════════════════════════════════════════════════════════════
-st.markdown("""
-<div class='footer'>
-    Sepsis Early Warning System &nbsp;·&nbsp;
-    XGBoost AUROC 0.8158 &nbsp;·&nbsp; PhysioNet CinC 2019
+# ── Footer
+st.markdown(f"""<div class="footer">
+    🏥 Sepsis Early Warning System v6.0 &nbsp;·&nbsp; Clinical Decision Support Tool<br>
+    Confidential Patient Record &nbsp;·&nbsp; {datetime.now().strftime('%B %d, %Y')}
 </div>""", unsafe_allow_html=True)

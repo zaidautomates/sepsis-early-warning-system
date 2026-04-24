@@ -6,3 +6,7 @@ xgboost
 matplotlib
 pandas
 scikit-learn
+reportlab
+openpyxl
+huggingface_hub
+
