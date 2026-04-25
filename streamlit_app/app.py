@@ -869,7 +869,7 @@ if st.session_state.risk_pct is not None:
     st.markdown("")
 
     # ── Tabs
-    tabs=st.tabs(["🎯 Risk Overview","📊 SHAP Analysis","🫀 Body Map","📋 Clinical Scores","📥 Export"])
+    tabs=st.tabs(["🎯 Risk Overview","📊 SHAP Analysis","🧍🏻 Body Map","📋 Clinical Scores","📥 Export"])
 
     # ──── TAB 0: Risk Overview ────
     with tabs[0]:
