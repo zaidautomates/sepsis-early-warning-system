@@ -42,51 +42,6 @@ The dashboard features a **clickable interactive organ body heatmap** — click 
 
 ---
 
-## 🖥️ Demo
-
-> **[🔗 Live App — Streamlit Cloud](#)** ← *Replace with your deployed URL after `streamlit run`*
-
-### Screenshots
-
-<table>
-<tr>
-<td width="50%">
-
-**Tab 1 — Risk Dashboard**
-![Risk Dashboard](docs/screenshots/tab1_risk_dashboard.png)
-*HIGH RISK patient — pulsing red card, SHAP top-12, vitals grid*
-
-</td>
-<td width="50%">
-
-**Tab 2 — Body Heatmap**
-![Body Heatmap](docs/screenshots/tab2_body_heatmap.png)
-*Organ heatmap — click any organ for detailed biomarker breakdown*
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**Tab 3 — SHAP Analysis**
-![SHAP Analysis](docs/screenshots/tab3_shap.png)
-*All 17 features ranked by SHAP value — cumulative waterfall*
-
-</td>
-<td width="50%">
-
-**Tab 4 — Export**
-![Export](docs/screenshots/tab4_export.png)
-*One-click PDF + Excel clinical report generation*
-
-</td>
-</tr>
-</table>
-
-> 📸 *Create `docs/screenshots/` folder and add screenshots after local setup*
-
----
-
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -167,14 +122,11 @@ sepsis-early-warning-system/
 │   └── 03_lstm_shap.ipynb           ← SHAP analysis + LSTM PyTorch experiment
 │
 ├── 📁 streamlit_app/
-│   └── app.py                       ← Dashboard v5.0 (1,635 lines)
+│   └── app.py                       ← Dashboard v6.0 (1,056 lines)
 │
 ├── 📁 outputs/
 │   ├── 03_model_comparison_final.csv
 │   └── [SHAP plots, model comparison charts]
-│
-├── 📁 docs/
-│   └── screenshots/                 ← Add your screenshots here
 │
 ├── requirements.txt
 ├── README.md
@@ -367,7 +319,7 @@ This project is licensed under the **MIT License** — see [LICENSE](LICENSE) fo
 - **Reyna et al. (2020)** for the benchmark performance reference used as validation
 - **SHAP library** (Lundberg & Lee) for making ML predictions interpretable
 - **XGBoost team** for the gradient boosting framework
-- **AWKUM AI & ML faculty** for course guidance and project feedback
+- **UETM AI & ML faculty** for course guidance and project feedback
 
 ---
 
